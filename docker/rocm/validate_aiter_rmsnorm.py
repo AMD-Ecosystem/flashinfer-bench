@@ -31,6 +31,7 @@ from flashinfer_bench.data import (
     save_json_file,
     save_jsonl_file,
 )
+from flashinfer_bench.integration.aiter import generate_aiter_solution, is_aiter_available
 
 H = 4096
 EPS = 1e-6
@@ -44,15 +45,6 @@ def run(x, weight):
     var = xf.pow(2).mean(-1, keepdim=True)
     normed = (xf * torch.rsqrt(var + {EPS})).to(x.dtype)
     return normed * weight
-"""
-
-# AITER-backed solution: a thin Python wrapper calling the tuned AITER op. This is exactly the
-# shape the §3.9 generator will emit automatically for covered op-types.
-AITER_SOLUTION = f"""
-import aiter
-
-def run(x, weight):
-    return aiter.rms_norm(x, weight, {EPS})
 """
 
 # Pure-torch solution (sanity baseline; equivalent to the reference).
@@ -99,10 +91,19 @@ def main() -> int:
         )
         save_json_file(definition, root / "definitions" / "rmsnorm_h4096.json")
 
-        for sol in (
-            _solution("rmsnorm_aiter", "aiter_impl.py", AITER_SOLUTION),
-            _solution("rmsnorm_torch", "torch_impl.py", TORCH_SOLUTION),
-        ):
+        # The AITER solution is produced by the §3.9 generator (not hand-written) so this
+        # validates the generator code path itself.
+        if not is_aiter_available():
+            print("aiter not available; cannot validate")
+            return 1
+        aiter_sol = generate_aiter_solution(definition, eps=EPS)
+        if aiter_sol is None:
+            print("generator returned no AITER solution for rmsnorm — FAIL")
+            return 1
+        print(f"generator produced solution '{aiter_sol.name}':")
+        print("    " + aiter_sol.sources[0].content.replace("\n", "\n    ").rstrip())
+
+        for sol in (aiter_sol, _solution("rmsnorm_torch", "torch_impl.py", TORCH_SOLUTION)):
             save_json_file(sol, root / "solutions" / f"{sol.name}.json")
 
         workload = Workload(
@@ -130,8 +131,8 @@ def main() -> int:
             perf = getattr(ev, "performance", None) if ev else None
             lat = f"{perf.latency_ms:.5f} ms" if perf else "n/a"
             spd = f"{perf.speedup_factor:.2f}x" if perf else "n/a"
-            print(f"[{status}] {t.solution:<16} latency={lat:<14} speedup={spd}")
-            if t.solution == "rmsnorm_aiter" and status == EvaluationStatus.PASSED:
+            print(f"[{status}] {t.solution:<22} latency={lat:<14} speedup={spd}")
+            if t.solution == aiter_sol.name and status == EvaluationStatus.PASSED:
                 ok = True
         print("-" * 72)
         print("RESULT:", "PASS — AITER solution built, correct, benchmarked" if ok else "FAIL")
