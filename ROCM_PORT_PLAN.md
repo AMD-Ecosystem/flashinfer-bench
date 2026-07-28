@@ -276,7 +276,12 @@ container on the GPU**. Files: `docker/rocm/{Dockerfile,run.sh,validate_p0.py,RE
 - ✅ **End-to-end loop proven on gfx942**: `tests/bench/test_benchmark.py` real Benchmark path —
   persistent runner spawns GPU workers, builds solutions, times them, checks correctness, computes
   speedup (5/6 pass).
-- ⏳ **AITER solution generator** (§3.9): not started.
+- ✅ **AITER approach validated end-to-end** (§3.9): hand-written AITER-backed Python solution
+  (`aiter.rms_norm`) for an RMSNorm definition runs through the real Benchmark loop on gfx942 —
+  **PASSED, 0.038 ms, 4.32x speedup** vs reference (`docker/rocm/validate_aiter_rmsnorm.py`). This
+  proves the pattern the generator will template; auto-generation across op-types is the remaining
+  work.
+- ⏳ **AITER solution generator** (§3.9): auto-emit across op-types — not started (pattern proven).
 - **Pre-existing (non-ROCm) test issues found** — would fail on NVIDIA too, not caused by the port,
   flagged for later: (a) `tests/bench/test_evaluator.py` passes a raw `BenchmarkConfig` (atol=None)
   to `DefaultEvaluator.evaluate` which expects a `ResolvedEvalConfig` (atol default 1e-2) →
