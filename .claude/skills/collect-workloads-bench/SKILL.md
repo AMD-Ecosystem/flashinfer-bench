@@ -8,6 +8,10 @@ launcher. This is an improved alternative to `collect_workloads.py sglang` that:
 - Handles server lifecycle cleanly via `popen_launch_server` / `kill_process_tree`
 - Still uses the same FlashInfer Level-10 tensor dump + `sanitize_dumps.py` pipeline
 
+> **ROCm / AMD fork note.** Like `collect-workloads`, this relies on FlashInfer Level-10 tensor
+> dumps that only ship in **NVIDIA `flashinfer`** — run it on an **NVIDIA** host and consume the
+> arch-agnostic workloads on AMD. See `CLAUDE.md` → [ROCm / AMD CDNA Fork](../../../CLAUDE.md).
+
 ## When to use
 
 Use when:

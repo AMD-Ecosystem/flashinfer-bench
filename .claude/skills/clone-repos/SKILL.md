@@ -7,6 +7,17 @@ description: Clone SGLang, FlashInfer, sgl-cookbook, and flashinfer-trace reposi
 
 Clone SGLang, FlashInfer, sgl-cookbook, and flashinfer-trace repositories to the `tmp/` directory.
 
+> **ROCm / AMD fork note.** This repo is the ROCm-only fork (see `CLAUDE.md` →
+> [ROCm / AMD CDNA Fork](../../../CLAUDE.md)). The clones this skill sets up feed the
+> **model-onboarding collection pipeline**, which relies on NVIDIA-`flashinfer` instrumentation
+> (`@flashinfer_api(trace=...)` dumping, `FLASHINFER_LOGLEVEL=10`) that `amd-flashinfer` does **not**
+> ship — so run collection on an **NVIDIA** host and consume the resulting dataset on AMD.
+>
+> For the ROCm **build → benchmark → apply** loop you do **not** need the SGLang / sgl-cookbook
+> clones at all — use the [`rocm-setup`](../rocm-setup/SKILL.md) skill (the `docker/rocm/` container)
+> instead. On ROCm, FlashInfer is `amd-flashinfer` (from `AMD-Ecosystem/flashinfer`, imported as
+> `flashinfer`) and the tuned op library is **AITER** (see the AITER step below).
+
 ## Description
 
 This skill sets up the required repositories for kernel extraction, testing, and workload collection workflows. It:
@@ -171,13 +182,52 @@ flashinfer-bench/
         └── traces/{op_type}/         # Eval traces (one entry per workload)
 ```
 
+## ROCm variant (AMD flashinfer + AITER)
+
+On the ROCm fork, use the AMD FlashInfer fork and add AITER. The supported path is the
+`docker/rocm/` container (see [`rocm-setup`](../rocm-setup/SKILL.md)), which installs
+`amd-flashinfer` and `amd_aiter` from `pypi.amd.com` for you. If you are instead cloning from
+source into `tmp/` (e.g. to read HIP kernel sources or debug):
+
+```bash
+# FlashInfer — AMD ROCm fork (imports as `flashinfer`; default branch amd-integration)
+if [ -d "tmp/flashinfer/.git" ]; then
+    (cd tmp/flashinfer && git remote set-url origin https://github.com/AMD-Ecosystem/flashinfer.git \
+        && git fetch origin && git checkout amd-integration && git reset --hard origin/amd-integration \
+        && git submodule update --init --recursive)
+else
+    git clone --recurse-submodules -b amd-integration \
+        https://github.com/AMD-Ecosystem/flashinfer.git tmp/flashinfer
+fi
+
+# AITER — AMD's tuned ROCm op library (source install; must match the image's ROCm version)
+if [ ! -d "tmp/aiter/.git" ]; then
+    git clone --recursive https://github.com/ROCm/aiter.git tmp/aiter
+fi
+# Prefer the pinned wheel from pypi.amd.com (see docker/rocm/Dockerfile); source build:
+# (cd tmp/aiter && python3 setup.py develop)
+```
+
+Verify on AMD:
+
+```bash
+python -c "import torch; assert torch.version.hip, 'not a ROCm torch'; print('HIP', torch.version.hip)"
+python -c "import flashinfer; print('amd-flashinfer', flashinfer.__version__)"
+python -c "import aiter; print('aiter ok')"
+```
+
+> Do **not** point `tmp/flashinfer` at the AMD fork when your goal is NVIDIA-side workload/definition
+> collection — that pipeline needs upstream `flashinfer-ai/flashinfer`'s trace/logging APIs.
+
 ## Requirements
 
 - Git (with submodule support)
 - Network access to GitHub (for sglang, flashinfer, sgl-cookbook, and their submodules)
 - Sufficient disk space (~6GB total including submodules and serving configs)
 - Python development environment for building from source
-- CUDA toolkit (for FlashInfer CUDA kernels)
+- **NVIDIA collection pipeline**: CUDA toolkit (for upstream FlashInfer CUDA kernels)
+- **ROCm benchmarking (this fork)**: ROCm 7.x toolchain (hipcc, rocprofv3) — normally provided by
+  the `docker/rocm/` image rather than a host install; see [`rocm-setup`](../rocm-setup/SKILL.md)
 
 ## Common Issues
 

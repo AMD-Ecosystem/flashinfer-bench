@@ -11,11 +11,19 @@ collected, baseline eval passing), open two atomic PRs in sequence:
 | # | Target repo | Content | Trigger |
 |---|-------------|---------|---------|
 | 2 | `flashinfer-ai/flashinfer-trace` (HuggingFace) | definition JSON + reference test + baseline solution + workload JSONL + safetensors blobs + eval traces | after Phase 3 |
-| 1 | `flashinfer-ai/flashinfer-bench` (GitHub) | `docs/model_coverage.mdx` update only | after PR 2 is open (so PR 1 can link to it) |
+| 1 | `AMD-Ecosystem/flashinfer-bench` (GitHub, base `amd-integration`) | `docs/model_coverage.mdx` update only | after PR 2 is open (so PR 1 can link to it) |
 
 After the trace-dataset refactor, the local `flashinfer_trace/` directory does not exist in
 `flashinfer-bench`; everything trace-related lives in the HuggingFace dataset. PR 1 is
 **only** the coverage-doc update plus a back-link to PR 2.
+
+> **ROCm / AMD fork note.** PR 1 (the coverage-doc code PR) targets this fork,
+> `AMD-Ecosystem/flashinfer-bench`, base `amd-integration` — **not** upstream
+> `flashinfer-ai/flashinfer-bench`. See [`rocm-pr-workflow`](../rocm-pr-workflow/SKILL.md) for the
+> fail-closed target check. PR 2 (the dataset PR) still goes to the shared, arch-agnostic HuggingFace
+> dataset `flashinfer-ai/flashinfer-trace`. Definitions/workloads themselves are collected on an
+> **NVIDIA** host (see `collect-workloads` / `extract-kernel-definitions`); this skill only publishes
+> the already-collected artifacts.
 
 **Rule: one definition = one pair of PRs.** Do not batch multiple definitions into one PR —
 each must be independently reviewable and mergeable.
@@ -47,7 +55,8 @@ each must be independently reviewable and mergeable.
 
 ## Prerequisites
 
-- `gh` CLI authenticated for `flashinfer-ai/flashinfer-bench` (PR 1).
+- `gh` CLI authenticated for `AMD-Ecosystem/flashinfer-bench` (PR 1), with write access to base
+  `amd-integration`.
 - `huggingface_hub` authenticated for `flashinfer-ai/flashinfer-trace` (PR 2).
 - For each definition: definition JSON in `tmp/flashinfer-trace/definitions/{op_type}/`,
   workload JSONL + blobs in the corresponding `tmp/flashinfer-trace/workloads/` and
@@ -185,7 +194,8 @@ Tracks the dataset addition at:
 "
 git push origin feat/def-{definition_name}
 gh pr create \
-  --repo flashinfer-ai/flashinfer-bench \
+  --repo AMD-Ecosystem/flashinfer-bench \
+  --base amd-integration \
   --title "docs: mark {definition_name} as covered for {model_display_name}" \
   --body "$(cat <<EOF
 ## Summary
@@ -358,7 +368,8 @@ When invoked with `--manifest`, append/update the `phase4` block per definition:
   access to `flashinfer-ai/flashinfer-trace`. Fall back to opening the PR manually from the
   worktree.
 - **GitHub PR creation fails**: requires `gh` authenticated with write access to
-  `flashinfer-ai/flashinfer-bench`. Print the diff and PR body for manual submission.
+  `AMD-Ecosystem/flashinfer-bench` (base `amd-integration`). Print the diff and PR body for manual
+  submission.
 - **`pre-commit` failure**: do not bypass with `--no-verify`. Fix the formatting and create
   a new commit.
 

@@ -7,6 +7,12 @@ description: Validate the correctness and completeness of a FlashInfer Trace dat
 
 Run structural, schema, and coverage checks on a FlashInfer Trace dataset. Produces a JSON report and optional text summary.
 
+> **ROCm / AMD fork note.** The GPU checks (`definition` build-reference, `baseline`, `benchmark`)
+> run on ROCm via the portable `torch.cuda.Event` timing backend (HIP events) — no CUDA-only
+> dependency. `--disable-gpu` still runs the structural/schema checks anywhere. On AMD, reference
+> `build_reference` is tagged `target_hardware=["rocm"]`. See
+> [`benchmark-on-rocm`](../benchmark-on-rocm/SKILL.md).
+
 ## Usage
 
 ```bash
