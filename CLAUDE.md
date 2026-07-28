@@ -18,8 +18,11 @@ profiling agents, or AITER integration.
 
 - **Base branch is `amd-integration`.** All PRs target `AMD-Ecosystem/flashinfer-bench` with
   `--base amd-integration`. Never open a PR against upstream `flashinfer-ai/flashinfer-bench`, and
-  never PR *from* `amd-integration` itself. See the [`pr-workflow`](.claude/skills/pr-workflow/SKILL.md)
+  never push to or PR *from* `amd-integration` itself. See the [`pr-workflow`](.claude/skills/pr-workflow/SKILL.md)
   skill for the fail-closed procedure.
+- **Branch names: plain hyphenated words** describing the change (e.g. `timing-torch-events`),
+  created off `origin/amd-integration`. **No `rocm/` prefix** (the whole fork is ROCm) and **no
+  plan-phase labels** (`p1`/`p2`) from `ROCM_PORT_PLAN.md`.
 - **HIP-as-CUDA — do not rename `device="cuda"` or `torch.cuda.*`.** PyTorch-ROCm exposes AMD GPUs
   through the same `torch.cuda.*` API and the device string stays `"cuda"` (HIP events, streams,
   and guards masquerade as CUDA). `device.type == "cuda"` is `True` on AMD — never test for

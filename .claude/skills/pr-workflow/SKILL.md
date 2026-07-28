@@ -90,6 +90,16 @@ Only `git reset --hard` here because the commits are already safe on `<topic-bra
 which commits are local-only, the topic branch already exists — STOP and report rather than reset. It
 is always better to fail to raise a PR than to push to or PR from `amd-integration`.
 
+## Branch naming
+
+Topic branches are created off `origin/amd-integration` and named with **plain hyphenated words**
+describing the change:
+
+- ✅ `pr-workflow-push-safety`, `timing-torch-events`, `aiter-solution-generator`
+- ❌ **no `rocm/` prefix** — the entire fork is ROCm, so it's redundant noise.
+- ❌ **no plan-phase labels** (`p1`, `p2`, …) from `ROCM_PORT_PLAN.md` — name the *change*, not the
+  plan milestone.
+
 ## CRITICAL: ask before pushing to remote (fail-closed)
 
 **Never `git push` (or `gh pr create`, which pushes) without first getting the user's explicit "yes"
