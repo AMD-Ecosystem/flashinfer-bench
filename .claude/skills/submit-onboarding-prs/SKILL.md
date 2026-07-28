@@ -19,7 +19,7 @@ After the trace-dataset refactor, the local `flashinfer_trace/` directory does n
 
 > **ROCm / AMD fork note.** PR 1 (the coverage-doc code PR) targets this fork,
 > `AMD-Ecosystem/flashinfer-bench`, base `amd-integration` — **not** upstream
-> `flashinfer-ai/flashinfer-bench`. See [`rocm-pr-workflow`](../rocm-pr-workflow/SKILL.md) for the
+> `flashinfer-ai/flashinfer-bench`. See [`pr-workflow`](../pr-workflow/SKILL.md) for the
 > fail-closed target check. PR 2 (the dataset PR) still goes to the shared, arch-agnostic HuggingFace
 > dataset `flashinfer-ai/flashinfer-trace`. Definitions/workloads themselves are collected on an
 > **NVIDIA** host (see `collect-workloads` / `extract-kernel-definitions`); this skill only publishes

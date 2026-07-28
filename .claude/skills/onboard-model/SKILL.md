@@ -14,7 +14,7 @@ chains them together via a shared run manifest.
 > `flashinfer` instrumentation that `amd-flashinfer` does not ship. The dataset it produces is
 > arch-agnostic and is consumed/benchmarked on AMD. Phase 4's coverage-doc PR (PR 1) targets this
 > fork (`AMD-Ecosystem/flashinfer-bench`, base `amd-integration`); the dataset PR (PR 2) targets
-> the shared HuggingFace dataset. See [`rocm-pr-workflow`](../rocm-pr-workflow/SKILL.md) and
+> the shared HuggingFace dataset. See [`pr-workflow`](../pr-workflow/SKILL.md) and
 > `CLAUDE.md` → [ROCm / AMD CDNA Fork](../../../CLAUDE.md).
 
 ## Overview of phases

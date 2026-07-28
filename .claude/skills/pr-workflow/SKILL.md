@@ -1,5 +1,5 @@
 ---
-name: rocm-pr-workflow
+name: pr-workflow
 description: Create and edit PRs on the ROCm fork AMD-Ecosystem/flashinfer-bench with fail-closed safeguards — always base amd-integration, never upstream flashinfer-ai/flashinfer-bench, and never PR from amd-integration itself (with a commit-relocation recovery). Covers the gh pr edit→REST workaround, the pre-PR quality gate, the Copilot-review resolution loop, and PR-description conventions. Use whenever opening or updating a PR from this repo.
 ---
 

@@ -18,7 +18,7 @@ profiling agents, or AITER integration.
 
 - **Base branch is `amd-integration`.** All PRs target `AMD-Ecosystem/flashinfer-bench` with
   `--base amd-integration`. Never open a PR against upstream `flashinfer-ai/flashinfer-bench`, and
-  never PR *from* `amd-integration` itself. See the [`rocm-pr-workflow`](.claude/skills/rocm-pr-workflow/SKILL.md)
+  never PR *from* `amd-integration` itself. See the [`pr-workflow`](.claude/skills/pr-workflow/SKILL.md)
   skill for the fail-closed procedure.
 - **HIP-as-CUDA — do not rename `device="cuda"` or `torch.cuda.*`.** PyTorch-ROCm exposes AMD GPUs
   through the same `torch.cuda.*` API and the device string stays `"cuda"` (HIP events, streams,
@@ -288,7 +288,7 @@ ROCm / AMD-CDNA skills (see the [ROCm / AMD CDNA Fork](#rocm--amd-cdna-fork) sec
 - **author-hip-solution**: Write hand-authored `.cu`/HIP bench solutions (CUDA→ROCm cheat sheet) for
   the torch and tvm-ffi builders
 - **debug-rocm**: Triage HIP crashes and AITER errors in bench runs
-- **rocm-pr-workflow**: Fail-closed PR creation against `AMD-Ecosystem/flashinfer-bench @ amd-integration`
+- **pr-workflow**: Fail-closed PR creation against `AMD-Ecosystem/flashinfer-bench @ amd-integration`
 
 ## Common Misunderstandings
 
