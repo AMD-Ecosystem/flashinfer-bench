@@ -6,8 +6,8 @@ description: Generate Definition JSON files for the flashinfer-trace HuggingFace
 # Extract Kernel Definitions
 
 Produce per-(op, shape) Definition JSONs and stage them in the HuggingFace dataset clone at
-`tmp/flashinfer-trace/definitions/{op_type}/`. PR submission is **out of scope** here — it happens
-in Phase 4 of [`/onboard-model`](../onboard-model/SKILL.md#phase-4-submit-prs).
+`tmp/flashinfer-trace/definitions/{op_type}/`. PR submission is **out of scope** here — see
+[`submit-onboarding-prs`](../submit-onboarding-prs/SKILL.md) (Phase 4 of `/onboard-model`).
 
 > **ROCm / AMD fork note.** Path A (trace-dump) requires the `@flashinfer_api(trace=...)` dumper,
 > which only exists in **NVIDIA `flashinfer`** — `amd-flashinfer` does not ship it. Run definition
@@ -476,10 +476,9 @@ schema by hand.
 3. Move on to workload collection: `/collect-workloads --definition-names {names}`.
    Tip: `/collect-workloads` can also dump definitions in the same SGLang run by setting
    the trace env vars — useful for picking up shapes you missed in step A2.
-4. PR submission is handled separately in Phase 4 of
-   [`/onboard-model`](../onboard-model/SKILL.md#phase-4-submit-prs). Do **not** add definition JSONs
-   to a `flashinfer_trace/...` path inside `flashinfer-bench` — that directory was removed in the
-   refactor.
+4. PR submission is handled separately by `/submit-onboarding-prs` (Phase 4 of
+   `/onboard-model`). Do **not** add definition JSONs to a `flashinfer_trace/...` path
+   inside `flashinfer-bench` — that directory was removed in the refactor.
 
 ---
 
@@ -509,7 +508,7 @@ schema by hand.
   FlashInfer / SGLang ground truth.
 - [collect-workloads](../collect-workloads/SKILL.md) — runs another SGLang pass and can
   dump definitions in the same run.
-- [onboard-model](../onboard-model/SKILL.md#phase-4-submit-prs) — Phase 4 PR flow.
+- [submit-onboarding-prs](../submit-onboarding-prs/SKILL.md) — Phase 4 PR flow.
 - FlashInfer trace docs:
   [`docs/fi_trace.rst`](https://github.com/flashinfer-ai/flashinfer/blob/main/docs/fi_trace.rst).
 - Reference SGLang harness:

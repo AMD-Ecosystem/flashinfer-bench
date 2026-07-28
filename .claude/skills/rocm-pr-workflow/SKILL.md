@@ -19,7 +19,7 @@ the fail-closed procedure that prevents it.
    rely on `gh` defaults.
 4. The **dataset** PR (HuggingFace `flashinfer-ai/flashinfer-trace`) is the one exception — it is
    arch-agnostic and stays upstream. That is a HuggingFace PR, not a `gh` PR. See
-   [`/onboard-model` Phase 4](../onboard-model/SKILL.md#phase-4-submit-prs).
+   [`submit-onboarding-prs`](../submit-onboarding-prs/SKILL.md).
 
 ## Pre-flight (fail-closed check)
 
@@ -107,4 +107,4 @@ exception changes.
 ## See Also
 
 - `CLAUDE.md` → [ROCm / AMD CDNA Fork](../../../CLAUDE.md) — base-branch rule
-- [onboard-model](../onboard-model/SKILL.md#phase-4-submit-prs) — Phase 4: coverage-doc PR (fork) + dataset PR (upstream)
+- [submit-onboarding-prs](../submit-onboarding-prs/SKILL.md) — coverage-doc PR (fork) + dataset PR (upstream)
