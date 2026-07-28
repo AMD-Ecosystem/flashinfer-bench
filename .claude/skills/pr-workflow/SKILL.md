@@ -1,140 +1,203 @@
 ---
 name: pr-workflow
-description: Create and edit PRs on the ROCm fork AMD-Ecosystem/flashinfer-bench with fail-closed safeguards — always base amd-integration, never upstream flashinfer-ai/flashinfer-bench, and never PR from amd-integration itself (with a commit-relocation recovery). Covers the gh pr edit→REST workaround, the pre-PR quality gate, the Copilot-review resolution loop, and PR-description conventions. Use whenever opening or updating a PR from this repo.
+description: How to create and edit PRs on the AMD-Ecosystem/flashinfer-bench GitHub repo (the ROCm fork) — fail-closed target/base safeguards, the never-push/PR-from-amd-integration rule, the ask-before-push rule, gh CLI quirks, the pre-PR quality gate, the automated-review loop, and PR-description conventions.
 ---
 
-# ROCm PR Workflow
+# PR Workflow (AMD-Ecosystem/flashinfer-bench)
 
-This repo is the ROCm-only fork. **Every code PR targets `AMD-Ecosystem/flashinfer-bench`, base
-`amd-integration`.** The most common mistake is a PR silently opened against upstream
-`flashinfer-ai/flashinfer-bench` (the fork parent) — `gh` defaults there. These safeguards are
-fail-closed: when the target can't be positively confirmed, **stop and report** rather than risk an
-upstream PR. Failing to open a PR is always better than opening it against upstream.
+> This repo is the ROCm-only fork of `flashinfer-ai/flashinfer-bench`. The GitHub repo is
+> `AMD-Ecosystem/flashinfer-bench`, base branch `amd-integration`. All `gh` commands below target it.
 
-## Hard rules
+## CRITICAL: PR target safeguard (fail-closed)
 
-1. **Base is always `amd-integration`** on `AMD-Ecosystem/flashinfer-bench`. Never `main`, never
-   `flashinfer-ai/*`.
-2. **`amd-integration` is base-only — never push it, never PR from it.** Never `git push` to the
-   remote `amd-integration`, and never open a PR with `amd-integration` as the head. To ship any
-   change, first create a topic branch off `origin/amd-integration`
-   (`git checkout -b <topic> origin/amd-integration`) and push/PR **that** branch. If you already
-   committed on a local `amd-integration`, use the recovery below.
-3. **Always pass `--repo AMD-Ecosystem/flashinfer-bench --base amd-integration` explicitly.** Don't
-   rely on `gh` defaults.
-4. **Exception:** the *dataset* PR (HuggingFace `flashinfer-ai/flashinfer-trace`) is arch-agnostic
-   and stays upstream — that's a HuggingFace PR, not a `gh` PR. See
-   [`submit-onboarding-prs`](../submit-onboarding-prs/SKILL.md).
+`AMD-Ecosystem/flashinfer-bench` is a **GitHub fork** of `flashinfer-ai/flashinfer-bench` (the true
+upstream). Because of this, `gh pr create` defaults the PR base to the fork-parent
+`flashinfer-ai/flashinfer-bench` unless explicitly overridden. **A PR must NEVER be opened against
+`flashinfer-ai/flashinfer-bench`.**
 
-## Pre-flight (fail-closed) — run before every PR
+All PRs go to **`AMD-Ecosystem/flashinfer-bench`**, base branch **`amd-integration`**.
+
+**Before ANY `gh pr create`, run this pre-flight check and ABORT if it fails:**
 
 ```bash
-# a) not on the base branch (empty output = detached HEAD → also abort)
-b=$(git branch --show-current); [ -n "$b" ] && [ "$b" != "amd-integration" ] \
-  || { echo "ABORT: on amd-integration or detached HEAD"; exit 1; }
-
-# b) origin is the AMD fork; there must be NO flashinfer-ai remote
-git remote get-url origin | grep -q "AMD-Ecosystem/flashinfer-bench" \
-  || { echo "ABORT: origin is not the fork"; exit 1; }
-git remote -v | grep -q "flashinfer-ai/flashinfer-bench" \
-  && { echo "ABORT: a flashinfer-ai remote exists — remove it"; exit 1; }
-
-# c) if a gh default repo is set, it must be the fork (unset is fine — we pass --repo)
-def=$(gh repo set-default --view 2>/dev/null || true)
-[ -z "$def" ] || echo "$def" | grep -q "AMD-Ecosystem/flashinfer-bench" \
-  || { echo "ABORT: gh default repo is '$def'"; exit 1; }
+gh repo set-default --view   # MUST print exactly: AMD-Ecosystem/flashinfer-bench
 ```
 
-If the resolved owner of `--repo` is ever `flashinfer-ai`, abort and report. Never guess the target.
+If it prints anything else (or errors), STOP — do not create the PR. Report the mismatch to the user
+instead. Never guess the target.
 
-## Recovery: you're on `amd-integration` with commits to ship
-
-Do **not** PR from it. Relocate the commits to a topic branch, restore the base, then PR from the
-topic branch (nothing is lost — the commits are safe on `<topic>` before the reset):
+**Always pass the target and base explicitly** — never rely on gh defaults:
 
 ```bash
-git branch <topic>                       # 1. capture local-only commits at current HEAD
-git fetch origin amd-integration         # 2. restore amd-integration to pristine remote state
-git reset --hard origin/amd-integration  #    (commits preserved on <topic>; verify with git log <topic>)
-git checkout <topic>                      # 3. proceed with the normal flow
+gh pr create --repo AMD-Ecosystem/flashinfer-bench --base amd-integration \
+  --title "<title>" --body "$(cat /tmp/pr_body.md)"
 ```
 
-Only `git reset --hard` because the commits are already on `<topic>`. If anything is ambiguous
-(uncommitted changes, unclear which commits are local-only, `<topic>` already exists), STOP and
-report.
+If the resolved owner of `--repo` is ever `flashinfer-ai`, abort. It is always better to fail to
+raise a PR and explain why than to raise one against upstream.
 
-## Create the PR
+### One-time setup after a fresh clone
+
+Local config (not checked in), redo per clone:
 
 ```bash
-git push -u origin <feature-branch>
-gh pr create --repo AMD-Ecosystem/flashinfer-bench --base amd-integration --head <feature-branch> \
-  --title "<type>: <summary>" --body "$(cat /tmp/pr_body.md)"
-
-# verify it landed on the right base
-gh pr view <n> --repo AMD-Ecosystem/flashinfer-bench --json baseRefName -q .baseRefName  # MUST be amd-integration
+git remote -v                                       # origin should be AMD-Ecosystem/flashinfer-bench; there must be NO flashinfer-ai remote
+gh repo set-default AMD-Ecosystem/flashinfer-bench  # pin gh base repo so it doesn't fall back to the fork parent
 ```
 
-**Stacked PRs:** still set `--base amd-integration` (per the hard rules); note the dependency in the
-body ("Stacked on #N; diff reduces once #N merges"). Don't set the base to the parent feature branch.
+If a remote pointing at `flashinfer-ai/flashinfer-bench` exists, remove it: `git remote remove <name>`.
 
-## Editing an open PR
+### Exception: the dataset PR stays upstream
 
-- Push follow-up commits to the same branch — the PR updates in place. Never close/reopen for a
-  fixable item; never amend/force-push after review without coordinating.
-- **`gh pr edit` can fail** with a "Projects (classic) deprecated" GraphQL error — edit the body via
-  REST instead:
-  ```bash
-  gh api repos/AMD-Ecosystem/flashinfer-bench/pulls/<n> --method PATCH --field body="$(cat /tmp/pr_body.md)"
-  ```
+Model onboarding also produces a **HuggingFace** dataset PR against `flashinfer-ai/flashinfer-trace`
+— that dataset is arch-agnostic and intentionally stays upstream (it's a HuggingFace PR, not a `gh`
+PR). Only the coverage-doc / code PR comes here. See
+[`submit-onboarding-prs`](../submit-onboarding-prs/SKILL.md).
 
-## Pre-PR quality gate (in order)
+## CRITICAL: never push or PR from `amd-integration` (fail-closed)
 
-1. **Simplify** — remove dead/scratch/debug code and unused imports; keep comments that carry real
-   *why*/constraints.
-2. **Code review** — self-review the diff; apply the worthwhile suggestions.
-3. **Tests** — run the pytests covering the change (`pytest -n auto --reruns 2 -m "not slow"`) and
-   report the real result. Docs/skill-only branches touch no Python — say so explicitly rather than
-   claiming a run.
-4. **Commit.** Then run the pre-flight safeguards and `gh pr create`.
+`amd-integration` is the **base** branch — it must never be the **head** of a PR, and you must
+**never `git push` to the remote `amd-integration`**. To ship any change, create a topic branch off
+`origin/amd-integration` (`git checkout -b <topic> origin/amd-integration`) and push/PR that branch.
+Before pushing a branch for a PR or running `gh pr create`, check the current branch:
+
+```bash
+git branch --show-current   # if "amd-integration" (or empty/detached), do NOT push/PR from it
+```
+
+This prints an **empty string** in detached-HEAD state — treat empty output as an abort condition
+too; STOP and report so a proper topic branch can be checked out first.
+
+If you are on `amd-integration` with commits to ship, do NOT raise the PR from it. Relocate the
+commits to a fresh topic branch, restore `amd-integration` to match the remote, then PR from the
+topic branch:
+
+```bash
+# 1. Capture the local-only commits onto a new branch at current HEAD
+git branch <topic-branch>
+
+# 2. Move amd-integration back to the pristine remote state (no commits lost — they are
+#    preserved on <topic-branch>). Verify origin/amd-integration is fetched and current first.
+git fetch origin amd-integration
+git reset --hard origin/amd-integration
+
+# 3. Switch to the topic branch and proceed with the normal PR flow
+git checkout <topic-branch>
+```
+
+Only `git reset --hard` here because the commits are already safe on `<topic-branch>` (confirm with
+`git log <topic-branch>` before resetting). If anything is ambiguous — uncommitted changes, unclear
+which commits are local-only, the topic branch already exists — STOP and report rather than reset. It
+is always better to fail to raise a PR than to push to or PR from `amd-integration`.
 
 ## CRITICAL: ask before pushing to remote (fail-closed)
 
 **Never `git push` (or `gh pr create`, which pushes) without first getting the user's explicit "yes"
-for that specific push.** It publishes to a shared repo. Applies to every push — the initial branch
-push, force-pushes after a rebase, and follow-up pushes addressing review comments; a prior "yes"
-does not authorize a later push. State what will be pushed and where (branch → `AMD-Ecosystem/
-flashinfer-bench`) and wait. Local-only work (commits, the quality gate, the local Copilot review)
-needs no confirmation — only the network push does. When in doubt, hold the push and ask.
+for that specific push.** It publishes to a shared repo. This applies to every push — the initial
+branch push, force-pushes after a rebase, and follow-up pushes addressing review comments; a prior
+"yes" does not authorize a later push. State exactly what will be pushed and where (branch →
+`AMD-Ecosystem/flashinfer-bench`) and wait. Local-only work (commits, the quality gate, the local
+review) needs no confirmation — only the network push does. When in doubt, hold the push and ask.
 
-## After creating: resolve automated review
+## GitHub CLI
 
-If the repo has an automated (e.g. Copilot) reviewer: wait for the full comment set to land (it may
-also auto-push "Potential fix" commits — `git fetch` and integrate before adding your own), evaluate
-each comment on its merits, fix the ones worth fixing and push, then **resolve every thread** with
-either a fix+commit-SHA reply or a won't-fix rationale. Thread resolution is GraphQL-only:
+`gh pr edit` can fail with a "Projects (classic) is being deprecated" GraphQL error on forks. Use the
+REST API instead:
 
 ```bash
-gh api graphql -f query='{ repository(owner:"AMD-Ecosystem", name:"flashinfer-bench") {
-  pullRequest(number: <PR>) { reviewThreads(first:50){ nodes {
-    id isResolved comments(first:10){ nodes { databaseId path body } } } } } } }'
-gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"<id>"}){ thread { isResolved } } }'
+# Update PR description
+gh api repos/AMD-Ecosystem/flashinfer-bench/pulls/<number> --method PATCH --field body="<body>"
+
+# Or from a file
+gh api repos/AMD-Ecosystem/flashinfer-bench/pulls/<number> --method PATCH --field body="$(cat /tmp/pr_body.md)"
 ```
 
-## PR description conventions
+## Before creating a PR: quality gate
 
-- `## Summary` — 1–3 sentences: what and why.
-- `### What changed` — bullet by file (``- **`path`** — one-line purpose``); `####` per component for
-  multi-subsystem PRs. Call out non-obvious choices.
-- `## Benchmark results` — for perf-touching PRs: shape line + table + speedup/overhead row (record
-  `gcnArchName` + `torch.version.hip`).
-- `## Test plan` — what was actually run (not aspirational), ending with `pre-commit run -a`.
+Run this gate on the branch's full diff before `gh pr create`, in order:
 
-Don't restate the diff — explain non-obvious decisions and surprising behavior.
+1. **Simplify / make production-ready.** Review all changes on the branch and run `/simplify`: remove
+   dead code, debug/scratch code, debug-only comments, and unused imports. Keep comments that carry
+   real value (the *why*, hidden constraints, non-obvious invariants) — do not strip those.
 
-## Maintaining this document
+2. **Code review.** Run `/code-review` on the diff, then apply the suggestions and recommendations you
+   judge worthwhile.
 
-Update if the fork's base branch changes, if the canonical GitHub home moves, or if the dataset-PR
-exception changes.
+3. **Run the relevant tests.** Run the pytests covering the changed code (see CLAUDE.md for commands,
+   e.g. `pytest -n auto --reruns 2 -m "not slow"`) and make sure there are no failures after the
+   changes. Docs/skill-only branches that touch no Python have no relevant tests — say so explicitly
+   rather than claiming a run.
+
+4. **Commit** the resulting changes.
+
+Only after this gate passes do the pre-flight safeguards and `gh pr create`.
+
+### Stacked PRs
+
+When a PR depends on another branch, still set `--base amd-integration` (per the rules above) and
+note the dependency in the body ("Stacked on #N; diff reduces once #N merges"). Don't set the base to
+the parent feature branch.
+
+## After creating a PR: handle the automated review
+
+If the repo has an automated reviewer (e.g. GitHub Copilot), run this loop after `gh pr create`
+before considering the PR done:
+
+1. **Wait for all comments to land.** The review is not instant — the reviewer posts a top-level
+   review plus inline comments a short while after the PR (and after each later push). Poll until the
+   comment set is stable; don't evaluate a half-posted review. If it *auto-pushes* "Potential fix"
+   commits to the branch, `git fetch` and integrate them before adding your own (rebase; resolve
+   conflicts keeping the more complete version).
+
+2. **Evaluate each comment on its merits.** Decide per comment whether to fix it — the reviewer is
+   often right but not always. Use judgement; do not blanket-apply.
+
+3. **Address the ones worth fixing**, commit, and push to the PR branch (with consent, per the
+   ask-before-push rule above).
+
+4. **Resolve every thread**, with the right closure for each:
+   - *Fixed* → reply citing the commit SHA, then resolve the thread.
+   - *Won't fix* → reply with the reason you decided not to address it, then resolve the thread.
+
+List and resolve threads via GraphQL (thread resolution and the `isResolved` flag are not exposed
+over REST; replying to a comment is):
+
+```bash
+# List threads (id + resolved + comment bodies). Bump first: for large PRs.
+gh api graphql -f query='
+{ repository(owner:"AMD-Ecosystem", name:"flashinfer-bench") {
+    pullRequest(number: <PR>) {
+      reviewThreads(first: 50) { nodes {
+        id isResolved
+        comments(first: 10) { nodes { databaseId author { login } path body } } } } } } }'
+
+# Reply to a comment (use the databaseId from above)
+gh api repos/AMD-Ecosystem/flashinfer-bench/pulls/<PR>/comments/<commentDatabaseId>/replies \
+  --method POST --field body="<reply>"
+
+# Resolve a thread (use the thread node id, e.g. PRRT_...)
+gh api graphql -f query='
+mutation { resolveReviewThread(input:{threadId:"<threadId>"}) { thread { isResolved } } }'
+```
+
+Done = no unresolved threads remain, each carrying either a fix+SHA reply or a won't-fix rationale.
+
+## PR Description
+
+**Body** — include sections that apply, skip the rest:
+
+- `## Summary` — 1–3 sentences on what and why.
+- `### What changed` with `####` per component when the PR spans multiple subsystems. Bullet by file:
+  ``- **`path`** — one-line purpose``. Call out non-obvious design choices.
+- `### Architecture / design notes` — only when there's a real choice to record. Tables for
+  routing/dispatch logic; explain *why*.
+- `## Benchmark results` — for perf-touching PRs. Shape line + table per entry point + mean
+  overhead/speedup row; record `gcnArchName` + `torch.version.hip` (see
+  [`benchmark-on-rocm`](../benchmark-on-rocm/SKILL.md)).
+- `## Test plan` — checklist of what was actually run (not aspirational), ending with
+  `pre-commit run -a`.
+
+Don't restate the diff and commits. Explain non-obvious decisions and surprising behaviors.
 
 ## See Also
 
