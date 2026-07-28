@@ -30,8 +30,35 @@ def _rmsnorm_def(name="rmsnorm_h4096", dtype="float16"):
     )
 
 
-def test_rmsnorm_op_type_registered():
-    assert "rmsnorm" in AITER_OP_TYPES
+def _layernorm_def(name="layernorm_h4096", dtype="float16"):
+    return Definition(
+        name=name,
+        op_type="layernorm",
+        axes={"M": AxisVar(), "H": AxisConst(value=4096)},
+        inputs={
+            "x": TensorSpec(shape=["M", "H"], dtype=dtype),
+            "weight": TensorSpec(shape=["H"], dtype=dtype),
+            "bias": TensorSpec(shape=["H"], dtype=dtype),
+        },
+        outputs={"out": TensorSpec(shape=["M", "H"], dtype=dtype)},
+        reference=_RMSNORM_REF,
+    )
+
+
+def _silu_mul_def(name="silu_mul_h4096", dtype="float16"):
+    return Definition(
+        name=name,
+        op_type="silu_and_mul",
+        axes={"M": AxisVar(), "H2": AxisConst(value=8192)},
+        inputs={"x": TensorSpec(shape=["M", "H2"], dtype=dtype)},
+        outputs={"out": TensorSpec(shape=["M", "H2"], dtype=dtype)},
+        reference=_RMSNORM_REF,
+    )
+
+
+def test_op_types_registered():
+    for op in ("rmsnorm", "layernorm", "silu_and_mul"):
+        assert op in AITER_OP_TYPES
 
 
 def test_generate_rmsnorm_solution():
@@ -61,6 +88,36 @@ def test_generated_solution_arity_matches_definition():
 
     params = list(inspect.signature(ns["run"]).parameters)
     assert params == list(d.inputs.keys())
+
+
+def test_generate_layernorm_solution():
+    d = _layernorm_def()
+    sol = generate_aiter_solution(d)  # default eps -> layernorm 1e-5
+    assert sol is not None
+    assert sol.spec.entry_point == "aiter_layernorm.py::run"
+    src = sol.sources[0].content
+    assert "def run(x, weight, bias):" in src
+    assert "aiter.layer_norm(x, weight, bias, 1e-05)" in src
+
+
+def test_generate_silu_and_mul_solution():
+    d = _silu_mul_def()
+    sol = generate_aiter_solution(d)
+    assert sol is not None
+    assert sol.spec.entry_point == "aiter_silu_and_mul.py::run"
+    src = sol.sources[0].content
+    assert "def run(x):" in src
+    assert "aiter.silu_and_mul(out, x)" in src
+    assert "x.shape[-1] // 2" in src
+
+
+def test_eps_override_applies():
+    assert "aiter.rms_norm(x, weight, 0.001)" in generate_aiter_solution(
+        _rmsnorm_def(), eps=1e-3
+    ).sources[0].content
+    assert "aiter.layer_norm(x, weight, bias, 0.001)" in generate_aiter_solution(
+        _layernorm_def(), eps=1e-3
+    ).sources[0].content
 
 
 def test_unsupported_op_type_returns_none():

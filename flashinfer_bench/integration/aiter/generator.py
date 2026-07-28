@@ -24,9 +24,10 @@ from flashinfer_bench.data import (
 
 logger = logging.getLogger(__name__)
 
-# Default RMSNorm epsilon. Definitions embed eps in their reference; we cannot reliably parse it, so
-# we use the near-universal 1e-6 and allow override via generate_aiter_solution(..., eps=...).
+# Per-op default epsilon. Definitions embed eps in their reference; we cannot reliably parse it, so
+# we use conventional defaults and allow override via generate_aiter_solution(..., eps=...).
 _DEFAULT_RMSNORM_EPS = 1e-6
+_DEFAULT_LAYERNORM_EPS = 1e-5
 
 # dtypes AITER's fp16/bf16 elementwise/norm ops accept directly.
 _FLOAT16_DTYPES = ("float16", "bfloat16")
@@ -76,7 +77,7 @@ def _all_float16ish(definition: Definition) -> bool:
 # --------------------------------------------------------------------------------------------------
 
 
-def _gen_rmsnorm(definition: Definition, *, eps: float) -> Optional[Solution]:
+def _gen_rmsnorm(definition: Definition, *, eps: Optional[float]) -> Optional[Solution]:
     """RMSNorm: out = (x / rms(x)) * weight  ->  aiter.rms_norm(x, weight, eps).
 
     Requires exactly two inputs (activation, weight), one output, all fp16/bf16.
@@ -88,6 +89,7 @@ def _gen_rmsnorm(definition: Definition, *, eps: float) -> Optional[Solution]:
     if not _all_float16ish(definition):
         logger.debug("rmsnorm: unsupported dtypes for AITER rms_norm")
         return None
+    eps = _DEFAULT_RMSNORM_EPS if eps is None else eps
     x, weight = args
     source = (
         "import aiter\n\n"
@@ -97,9 +99,60 @@ def _gen_rmsnorm(definition: Definition, *, eps: float) -> Optional[Solution]:
     return _make_solution(definition, "aiter_rmsnorm.py", source)
 
 
+def _gen_layernorm(definition: Definition, *, eps: Optional[float]) -> Optional[Solution]:
+    """LayerNorm: out = layer_norm(x, weight, bias)  ->  aiter.layer_norm(x, weight, bias, eps).
+
+    Requires exactly three inputs (activation, weight, bias), one output, all fp16/bf16.
+    """
+    args = _input_names(definition)
+    if len(args) != 3 or len(definition.outputs) != 1:
+        logger.debug("layernorm: expected 3 inputs / 1 output, got %d/%d", len(args), len(definition.outputs))
+        return None
+    if not _all_float16ish(definition):
+        logger.debug("layernorm: unsupported dtypes for AITER layer_norm")
+        return None
+    eps = _DEFAULT_LAYERNORM_EPS if eps is None else eps
+    x, weight, bias = args
+    source = (
+        "import aiter\n\n"
+        f"def run({x}, {weight}, {bias}):\n"
+        f"    return aiter.layer_norm({x}, {weight}, {bias}, {eps!r})\n"
+    )
+    return _make_solution(definition, "aiter_layernorm.py", source)
+
+
+def _gen_silu_and_mul(definition: Definition, *, eps: Optional[float]) -> Optional[Solution]:
+    """Gated SiLU MLP: out = silu(x[..., :H]) * x[..., H:] over a [..., 2H] input.
+
+    AITER's ``silu_and_mul`` is destination-passing, so the wrapper allocates the [..., H] output,
+    fills it, and returns it (value-returning to match the benchmark convention).
+    Requires exactly one input, one output, all fp16/bf16.
+    """
+    args = _input_names(definition)
+    if len(args) != 1 or len(definition.outputs) != 1:
+        logger.debug("silu_and_mul: expected 1 input / 1 output, got %d/%d", len(args), len(definition.outputs))
+        return None
+    if not _all_float16ish(definition):
+        logger.debug("silu_and_mul: unsupported dtypes for AITER silu_and_mul")
+        return None
+    (x,) = args
+    source = (
+        "import torch\n"
+        "import aiter\n\n"
+        f"def run({x}):\n"
+        f"    out = torch.empty(*{x}.shape[:-1], {x}.shape[-1] // 2, "
+        f"dtype={x}.dtype, device={x}.device)\n"
+        f"    aiter.silu_and_mul(out, {x})\n"
+        f"    return out\n"
+    )
+    return _make_solution(definition, "aiter_silu_and_mul.py", source)
+
+
 # op_type -> handler. Handlers accept (definition, eps=...) and ignore kwargs they don't use.
 _GENERATORS: Dict[str, Callable[..., Optional[Solution]]] = {
     "rmsnorm": _gen_rmsnorm,
+    "layernorm": _gen_layernorm,
+    "silu_and_mul": _gen_silu_and_mul,
 }
 
 # op-types this generator knows how to attempt (may still return None per-definition).
@@ -107,7 +160,7 @@ AITER_OP_TYPES = tuple(sorted(_GENERATORS.keys()))
 
 
 def generate_aiter_solution(
-    definition: Definition, *, eps: float = _DEFAULT_RMSNORM_EPS
+    definition: Definition, *, eps: Optional[float] = None
 ) -> Optional[Solution]:
     """Generate an AITER-backed Solution for ``definition``, or None if unsupported.
 
@@ -115,8 +168,9 @@ def generate_aiter_solution(
     ----------
     definition : Definition
         The op definition to generate a solution for.
-    eps : float
-        Epsilon for normalization op-types (rmsnorm). Defaults to 1e-6.
+    eps : Optional[float]
+        Epsilon for normalization op-types. If None, per-op defaults are used (rmsnorm 1e-6,
+        layernorm 1e-5).
 
     Returns
     -------
@@ -135,7 +189,7 @@ def generate_aiter_solution(
 
 
 def generate_aiter_solutions(
-    definitions: Dict[str, Definition], *, eps: float = _DEFAULT_RMSNORM_EPS
+    definitions: Dict[str, Definition], *, eps: Optional[float] = None
 ) -> Dict[str, Solution]:
     """Generate AITER solutions for every supported definition in a mapping.
 

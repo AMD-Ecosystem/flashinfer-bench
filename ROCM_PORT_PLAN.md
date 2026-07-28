@@ -282,9 +282,11 @@ container on the GPU**. Files: `docker/rocm/{Dockerfile,run.sh,validate_p0.py,RE
   proves the pattern the generator will template; auto-generation across op-types is the remaining
   work.
 - ✅ **AITER solution generator** (§3.9): `integration/aiter/` with an extensible op-type registry
-  (`generate_aiter_solution` / `generate_aiter_solutions`). RMSNorm handler shipped and validated
-  end-to-end (generator-produced solution → PASSED, 5.84x on gfx942). 7 CPU-only unit tests. Adding
-  more op-types (attention/MoE/GEMM-variants) is now incremental registry work.
+  (`generate_aiter_solution` / `generate_aiter_solutions`). Handlers for **rmsnorm, layernorm,
+  silu_and_mul** (per-op eps defaults; returns None outside AITER's arity/dtype envelope). 10
+  CPU-only unit tests. Validated end-to-end on gfx942 (`docker/rocm/validate_aiter_ops.py`):
+  **3/3 generator-produced solutions PASSED** — rmsnorm 6.05x, layernorm 4.68x, silu_and_mul 4.32x
+  vs reference. Adding attention/MoE/GEMM-variants is now incremental registry work.
 - ⏳ Wire AITER solutions into the `apply` path (§3.9 step 3) — next.
 - **Pre-existing (non-ROCm) test issues found** — would fail on NVIDIA too, not caused by the port,
   flagged for later: (a) `tests/bench/test_evaluator.py` passes a raw `BenchmarkConfig` (atol=None)
