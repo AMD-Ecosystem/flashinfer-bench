@@ -28,7 +28,7 @@ a misread benchmark:
   fa2/HIP for non-NHD, custom mask, dtype ∉ {fp16,bf16}, `dtype_q != dtype_kv`,
   `head_dim_qk != head_dim_vo`, or non-`NONE` pos-encoding. A "no speedup" AITER run is often a
   silent fallback — confirm the backend actually engaged. (See
-  [`benchmark-on-rocm`](../benchmark-on-rocm/SKILL.md) and [`debug-rocm`](../debug-rocm/SKILL.md).)
+  [`rocm-benchmark`](../rocm-benchmark/SKILL.md) and [`rocm-debug`](../rocm-debug/SKILL.md).)
 - **Op coverage varies by version.** Norm/silu/rope-style elementwise ops are broadly available;
   attention is opt-in and constrained as above. Always treat an uncovered op/shape/dtype as a normal
   fallthrough, not an error.
@@ -72,7 +72,7 @@ def run(x, weight):
 
 Feed it into the normal loop (`docker/rocm/validate_aiter_ops.py` shows the in-memory `TraceSet`
 path; for dataset solutions, add it under `solutions/` and run `flashinfer-bench run`). Timing /
-tolerances: [`benchmark-on-rocm`](../benchmark-on-rocm/SKILL.md).
+tolerances: [`rocm-benchmark`](../rocm-benchmark/SKILL.md).
 
 ## Extending coverage (new op-type generator)
 
@@ -105,6 +105,6 @@ coverage (page sizes / fallback conditions) changes.
 - `flashinfer_bench/integration/aiter/generator.py` — implementation
 - `docker/rocm/validate_aiter_ops.py` — end-to-end proof + template
 - [ROCM_PORT_PLAN.md](../../../ROCM_PORT_PLAN.md) §3.9 — AITER integration plan
-- [benchmark-on-rocm](../benchmark-on-rocm/SKILL.md) — verify the backend engaged; tolerances
-- [debug-rocm](../debug-rocm/SKILL.md) — AITER error modes
+- [rocm-benchmark](../rocm-benchmark/SKILL.md) — verify the backend engaged; tolerances
+- [rocm-debug](../rocm-debug/SKILL.md) — AITER error modes
 - [rocm-setup](../rocm-setup/SKILL.md) — install AITER

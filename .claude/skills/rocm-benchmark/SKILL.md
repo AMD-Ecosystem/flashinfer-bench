@@ -1,5 +1,5 @@
 ---
-name: benchmark-on-rocm
+name: rocm-benchmark
 description: Time, profile, and validate GPU work on AMD CDNA (gfx942/gfx950) — timing-method selection (torch/HIP events vs rocprofv3 vs omnitrace), rocprofv3 counter presets and roofline, clock pinning and reproducibility, gcnArchName arch recording, fp8/bf16 tolerances, AITER-backend constraints, and CDNA tuning references. Applies to the FlashInfer-Bench Benchmark loop and to any standalone kernel measurement on AMD Instinct.
 ---
 
@@ -95,7 +95,7 @@ AMD rounding differs from NVIDIA; the evaluator's per-dtype tolerances may need 
 
 AMD fp8 uses the **`_fnuz`** encodings (`float8_e4m3fnuz` / `float8_e5m2fnuz`), which are *not*
 bit-compatible with NVIDIA's OCP `_fn` fp8 — a scale-factor/dtype issue, not a tolerance one. See
-[`debug-rocm`](../debug-rocm/SKILL.md).
+[`rocm-debug`](../rocm-debug/SKILL.md).
 
 ## AITER backend constraints
 
@@ -123,8 +123,6 @@ FIB_TIMING_BACKEND=rocprof FIB_L2_FLUSH_MB=256 \
   tools/gpu-lock --gpus 1 -- python -m flashinfer_bench run --local <trace_dir> --definitions <def>
 ```
 
-Dataset-wide checks: [`validate-dataset`](../validate-dataset/SKILL.md) uses this same timing backend.
-
 ## CDNA tuning references
 
 When optimizing a CDNA kernel, consult in order:
@@ -144,6 +142,6 @@ Update when `bench/timing.py` gains the rocprof backend, when clock-locking land
 
 - [rocm-setup](../rocm-setup/SKILL.md) — environment + essential commands
 - [generate-aiter-solution](../generate-aiter-solution/SKILL.md) — AITER coverage reality
-- [author-hip-solution](../author-hip-solution/SKILL.md) — arch flags for hand-written kernels
-- [debug-rocm](../debug-rocm/SKILL.md) — fp8 / NaN / crash triage
+- [add-rocm-kernel](../add-rocm-kernel/SKILL.md) — arch flags for hand-written kernels
+- [rocm-debug](../rocm-debug/SKILL.md) — fp8 / NaN / crash triage
 - [ROCM_PORT_PLAN.md](../../../ROCM_PORT_PLAN.md) §3.0–3.1, §3.6, §3.10

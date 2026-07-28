@@ -47,13 +47,6 @@ gh repo set-default AMD-Ecosystem/flashinfer-bench  # pin gh base repo so it doe
 
 If a remote pointing at `flashinfer-ai/flashinfer-bench` exists, remove it: `git remote remove <name>`.
 
-### Exception: the dataset PR stays upstream
-
-Model onboarding also produces a **HuggingFace** dataset PR against `flashinfer-ai/flashinfer-trace`
-— that dataset is arch-agnostic and intentionally stays upstream (it's a HuggingFace PR, not a `gh`
-PR). Only the coverage-doc / code PR comes here. See
-[`submit-onboarding-prs`](../submit-onboarding-prs/SKILL.md).
-
 ## CRITICAL: never push or PR from `amd-integration` (fail-closed)
 
 `amd-integration` is the **base** branch — it must never be the **head** of a PR, and you must
@@ -203,7 +196,7 @@ Done = no unresolved threads remain, each carrying either a fix+SHA reply or a w
   routing/dispatch logic; explain *why*.
 - `## Benchmark results` — for perf-touching PRs. Shape line + table per entry point + mean
   overhead/speedup row; record `gcnArchName` + `torch.version.hip` (see
-  [`benchmark-on-rocm`](../benchmark-on-rocm/SKILL.md)).
+  [`rocm-benchmark`](../rocm-benchmark/SKILL.md)).
 - `## Test plan` — checklist of what was actually run (not aspirational), ending with
   `pre-commit run -a`.
 
@@ -212,4 +205,3 @@ Don't restate the diff and commits. Explain non-obvious decisions and surprising
 ## See Also
 
 - `CLAUDE.md` → [ROCm / AMD CDNA Fork](../../../CLAUDE.md) — base-branch rule
-- [submit-onboarding-prs](../submit-onboarding-prs/SKILL.md) — coverage-doc PR (fork) + dataset PR (upstream)

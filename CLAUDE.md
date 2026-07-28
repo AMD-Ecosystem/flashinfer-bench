@@ -67,7 +67,7 @@ benchmarked/verified like any other solution. See the
 NVIDIA-only CUPTI path is gone. Knobs: `FIB_TIMING_BACKEND` (default `torch_events`; `rocprof`
 reserved for the accurate `rocprofv3`-CLI backend) and `FIB_L2_FLUSH_MB` (cold-L2 flush, default
 256). For measurement quality and profiling see the
-[`benchmark-on-rocm`](.claude/skills/benchmark-on-rocm/SKILL.md) skill.
+[`rocm-benchmark`](.claude/skills/rocm-benchmark/SKILL.md) skill.
 
 ### Essential commands
 
@@ -94,16 +94,16 @@ Full setup (container + bare-metal) is in [`rocm-setup`](.claude/skills/rocm-set
 - **`pytest -n auto` halves the physical GPU count** to avoid HSA/hipBLAS flakiness; `--reruns 2`
   absorbs transient HIP flakiness; the `slow` marker gates heavy tests.
 - **fp8 is `_fnuz` on CDNA** (`float8_e4m3fnuz` / `_e5m2fnuz`), not NVIDIA OCP `_fn` — a dtype/scale
-  issue, not a tolerance one. See [`debug-rocm`](.claude/skills/debug-rocm/SKILL.md).
+  issue, not a tolerance one. See [`rocm-debug`](.claude/skills/rocm-debug/SKILL.md).
 
-### Trace pipeline caveat (collect on NVIDIA, run on AMD)
+### Trace dataset: consumed here, produced on NVIDIA
 
-The FlashInfer **trace dataset is arch-agnostic** (definitions/workloads are just shapes + tensors).
-But the collection tooling — `@flashinfer_api(trace=...)` dumping (Path A of
-`extract-kernel-definitions`) and `FLASHINFER_LOGLEVEL=10` Level-10 logging (`collect-workloads`) —
-is instrumentation that only ships in **NVIDIA `flashinfer`**, not `amd-flashinfer`. So on this
-fork: **collect/generate definitions and workloads on NVIDIA**, then **consume the dataset and
-benchmark/apply solutions on AMD**. The onboarding-pipeline skills carry this caveat inline.
+The FlashInfer **trace dataset is arch-agnostic** (definitions/workloads are just shapes + tensors)
+and lives on HuggingFace. Its collection tooling (`@flashinfer_api(trace=...)` dumping and
+`FLASHINFER_LOGLEVEL=10` logging) ships only in **NVIDIA `flashinfer`**, not `amd-flashinfer` — so
+definitions/workloads are generated on NVIDIA. This fork **consumes** that dataset to build,
+benchmark, and apply solutions on AMD (the model-onboarding/collection skills are intentionally not
+part of this lean fork).
 
 ## Project Overview
 
@@ -170,19 +170,13 @@ tmp/flashinfer-trace/                  # local clone of the HuggingFace dataset
 └── traces/{op_type}/{definition_name}.jsonl
 ```
 
-Browse `tmp/flashinfer-trace/definitions/` to see the current set of supported op_types
-once `/clone-repos` has been run.
+Browse the [HuggingFace dataset](https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace)'s
+`definitions/` to see the current set of supported op_types. To benchmark on AMD you **consume** this
+dataset locally — see the [`rocm-setup`](.claude/skills/rocm-setup/SKILL.md) and
+[`rocm-benchmark`](.claude/skills/rocm-benchmark/SKILL.md) skills.
 
-### Lifecycle
-
-1. Run `/clone-repos` to ensure `tmp/flashinfer-trace/` is checked out and up to date.
-2. Generate or update content under `tmp/flashinfer-trace/` and commit on a feature branch.
-3. Open a PR against the HuggingFace dataset repo (PR 2 in the onboard-model flow).
-4. Open a companion PR against `flashinfer-bench` that updates **only** `docs/model_coverage.mdx`
-   to reflect the new coverage (PR 1 in the onboard-model flow).
-
-The HuggingFace dataset is the primary edit surface — flashinfer-bench owns code, docs,
-and the coverage doc, not the trace data itself.
+The HuggingFace dataset is the primary edit surface for trace data — flashinfer-bench owns code,
+docs, and the coverage doc, not the trace data itself.
 
 ### Definition JSON Structure
 
@@ -210,7 +204,7 @@ Key conventions:
 - **TP/EP**: Some kernel types (attention, MoE) produce separate definitions per tensor/expert
   parallelism setting because parallelism changes constant axis values (e.g., head counts,
   local expert counts). Other kernel types (normalization, GEMM, RoPE, sampling) are
-  parallelism-agnostic. See the `extract-kernel-definitions` skill for the full rules.
+  parallelism-agnostic.
 
 Refer to `docs/flashinfer-trace/definition.mdx` for the complete schema documentation.
 
@@ -263,34 +257,20 @@ reason against the external dataset
 
 ### Agent and skill workflows
 
-Start with `.claude/skills/`. Each subdirectory contains a `SKILL.md` with full instructions.
-
-- **onboard-model**: End-to-end pipeline for discovering new LLMs and onboarding them
-  (repo updates, model discovery, definition generation, workload collection, PR submission)
-- **extract-kernel-definitions**: Extract kernel schemas from SGLang model implementations
-  with deduplication, generate Definition JSON files
-- **collect-workloads**: Collect real workloads from SGLang inference runs using FlashInfer
-  logging API, sanitize and submit to flashinfer-trace
-- **collect-workloads-bench**: Collect workloads using `bench_serving.py` with model-specific
-  server configs from `model_configs.json`
-- **add-reference-tests**: Add pytest tests to validate reference implementations against
-  FlashInfer or SGLang ground truth
-- **track-models**: Track open-source LLMs and update `docs/model_coverage.mdx` with kernel
-  support status
-- **clone-repos**: Clone SGLang, FlashInfer (AMD fork), sgl-cookbook, AITER, and flashinfer-trace
-  to `tmp/`
-
-ROCm / AMD-CDNA skills (see the [ROCm / AMD CDNA Fork](#rocm--amd-cdna-fork) section):
+Start with `.claude/skills/`. Each subdirectory contains a `SKILL.md` with full instructions. This
+fork keeps a lean, ROCm-benchmark-focused set (see the
+[ROCm / AMD CDNA Fork](#rocm--amd-cdna-fork) section). To just run a benchmark, chain the first
+three; see [`ROCM_QUICKSTART.md`](ROCM_QUICKSTART.md).
 
 - **rocm-setup**: Build/run the `docker/rocm/` dev container, install AITER, and run the P0/AITER
   validation scripts on gfx942
-- **benchmark-on-rocm**: Time and profile solutions on ROCm (torch-event vs `rocprofv3` backends,
+- **rocm-benchmark**: Time and profile solutions on ROCm (torch-event vs `rocprofv3` backends,
   clock pinning, arch detection, fp8/bf16 tolerances)
 - **generate-aiter-solution**: Emit AITER-backed Python solutions for covered op-types via
   `flashinfer_bench/integration/aiter/`
-- **author-hip-solution**: Write hand-authored `.cu`/HIP bench solutions (CUDA→ROCm cheat sheet) for
+- **add-rocm-kernel**: Write hand-authored `.cu`/HIP bench solutions (CUDA→ROCm cheat sheet) for
   the torch and tvm-ffi builders
-- **debug-rocm**: Triage HIP crashes and AITER errors in bench runs
+- **rocm-debug**: Triage HIP crashes and AITER errors in bench runs
 - **pr-workflow**: Fail-closed PR creation against `AMD-Ecosystem/flashinfer-bench @ amd-integration`
 
 ## Common Misunderstandings

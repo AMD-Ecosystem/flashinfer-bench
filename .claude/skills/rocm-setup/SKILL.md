@@ -107,4 +107,4 @@ the version table in sync with `docker/rocm/Dockerfile`.
 
 - [docker/rocm/README.md](../../../docker/rocm/README.md) — container reference
 - [ROCM_PORT_PLAN.md](../../../ROCM_PORT_PLAN.md) — porting plan + P0/P1 results
-- [benchmark-on-rocm](../benchmark-on-rocm/SKILL.md) · [generate-aiter-solution](../generate-aiter-solution/SKILL.md) · [debug-rocm](../debug-rocm/SKILL.md)
+- [rocm-benchmark](../rocm-benchmark/SKILL.md) · [generate-aiter-solution](../generate-aiter-solution/SKILL.md) · [rocm-debug](../rocm-debug/SKILL.md)
