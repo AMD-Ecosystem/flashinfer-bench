@@ -9,6 +9,12 @@ Produce per-(op, shape) Definition JSONs and stage them in the HuggingFace datas
 `tmp/flashinfer-trace/definitions/{op_type}/`. PR submission is **out of scope** here — see
 [`submit-onboarding-prs`](../submit-onboarding-prs/SKILL.md) (Phase 4 of `/onboard-model`).
 
+> **ROCm / AMD fork note.** Path A (trace-dump) requires the `@flashinfer_api(trace=...)` dumper,
+> which only exists in **NVIDIA `flashinfer`** — `amd-flashinfer` does not ship it. Run definition
+> extraction on an **NVIDIA** host; the resulting JSONs are arch-agnostic and are consumed on AMD.
+> Path B (manual extraction from SGLang sources) is host-agnostic. See `CLAUDE.md` →
+> [ROCm / AMD CDNA Fork](../../../CLAUDE.md).
+
 ## Two paths
 
 | Path | When to use | What you do |

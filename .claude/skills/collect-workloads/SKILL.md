@@ -9,6 +9,11 @@ Collect real-world workloads by running SGLang inference with FlashInfer Level 1
 
 **No code changes to SGLang or FlashInfer are required.** Collection works entirely through FlashInfer's built-in logging API.
 
+> **ROCm / AMD fork note.** FlashInfer Level-10 logging (`FLASHINFER_LOGLEVEL=10` tensor dumps) is
+> instrumentation that only ships in **NVIDIA `flashinfer`**, not `amd-flashinfer`. Run workload
+> collection on an **NVIDIA** host; the resulting workloads + blobs are arch-agnostic and are
+> benchmarked/applied on AMD. See `CLAUDE.md` → [ROCm / AMD CDNA Fork](../../../CLAUDE.md).
+
 ## Scripts
 
 | Script | Purpose |
