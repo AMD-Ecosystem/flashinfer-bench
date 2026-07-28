@@ -66,6 +66,33 @@ reserved for the accurate `rocprofv3`-CLI backend) and `FIB_L2_FLUSH_MB` (cold-L
 256). For measurement quality and profiling see the
 [`benchmark-on-rocm`](.claude/skills/benchmark-on-rocm/SKILL.md) skill.
 
+### Essential commands
+
+| Task | Command |
+|------|---------|
+| Install bench editable (no NVIDIA deps) | `pip install -e . --no-deps` |
+| Run tests (fast) | `pytest -n auto --reruns 2 -m "not slow"` |
+| Clear JIT cache (after any toolchain/flag change) | `rm -rf ~/.cache/flashinfer/` |
+| Set target arch(s) | `export FLASHINFER_ROCM_ARCH_LIST="gfx942,gfx950"` |
+| Limit parallel build / verbose JIT | `export MAX_JOBS=4` · `export FLASHINFER_JIT_VERBOSE=1` |
+| Lint | `pre-commit run -a` |
+
+Full setup (container + bare-metal) is in [`rocm-setup`](.claude/skills/rocm-setup/SKILL.md).
+
+### Non-obvious ROCm gotchas
+
+- **Torch must be the AMD ROCm build** (from `repo.radeon.com`); a stray PyPI/CPU wheel breaks
+  everything. Guard: `python -c "import torch; assert torch.version.hip"`.
+- **AITER is a separate install** matched to the ROCm version (`ROCm/aiter`, `setup.py develop`, or
+  the pinned `amd_aiter` wheel). Check via `flashinfer.aiter_utils.is_aiter_supported` /
+  `flashinfer_bench.integration.aiter.is_aiter_available`.
+- **JIT `build.ninja` is only (re)written when missing** — changing env/flags is a silent no-op until
+  you clear `~/.cache/flashinfer/`.
+- **`pytest -n auto` halves the physical GPU count** to avoid HSA/hipBLAS flakiness; `--reruns 2`
+  absorbs transient HIP flakiness; the `slow` marker gates heavy tests.
+- **fp8 is `_fnuz` on CDNA** (`float8_e4m3fnuz` / `_e5m2fnuz`), not NVIDIA OCP `_fn` — a dtype/scale
+  issue, not a tolerance one. See [`debug-rocm`](.claude/skills/debug-rocm/SKILL.md).
+
 ### Trace pipeline caveat (collect on NVIDIA, run on AMD)
 
 The FlashInfer **trace dataset is arch-agnostic** (definitions/workloads are just shapes + tensors).

@@ -1,74 +1,101 @@
 ---
 name: debug-rocm
-description: Triage HIP crashes, memory faults, NaN/Inf, OOM, FP8 dtype mismatches, and AITER errors that surface when building or benchmarking FlashInfer-Bench solutions on AMD CDNA GPUs. Covers the AMD_SERIALIZE_KERNEL + HIP_LAUNCH_BLOCKING combo, rocgdb, AMD_LOG_LEVEL, dmesg amdgpu faults, and why compute-sanitizer has no ROCm analog. Use when a solution run crashes or produces wrong numbers on ROCm.
+description: Debug HIP kernel crashes, memory-access faults, NaN/Inf, HIP OOM, FP8 dtype mismatches, and AITER errors on AMD CDNA (gfx942/gfx950). Covers the AMD_SERIALIZE_KERNEL + HIP_LAUNCH_BLOCKING combo, a per-error recipe table, the rocgdb / AMD_LOG_LEVEL / HSA / dmesg tooling set, AMD gotchas (ROCm masquerade, wavefront=64, fnuz FP8, stripped installs), and why compute-sanitizer has no ROCm analog. Use when a build or benchmark run crashes or produces wrong numbers on ROCm.
 ---
 
 # Debug ROCm
 
-Fast triage for failures during the bench build → benchmark → apply loop on AMD. Run
-[`rocm-setup`](../rocm-setup/SKILL.md) first if the environment itself is suspect (`validate_p0.py`).
+HIP crash and correctness triage on AMD. This is ROCm debugging know-how; it applies to bench
+solution runs, standalone repros, and hand-written HIP kernels alike.
 
-## First move: make the crash synchronous and located
+## The magic env-var combo
 
-HIP kernel launches are async, so the Python traceback usually points at the wrong line. Force
-synchronous, serialized execution so the failing kernel is the one reported:
-
-```bash
-AMD_SERIALIZE_KERNEL=3 HIP_LAUNCH_BLOCKING=1 \
-  python -m flashinfer_bench run --local <trace_dir> --definitions <def>
-```
-
-`AMD_SERIALIZE_KERNEL=3` waits before *and* after each kernel; `HIP_LAUNCH_BLOCKING=1` makes
-launches synchronous. Together they localize memory faults to the offending kernel.
-
-## Turn up logging
-
-| Env | Effect |
-|---|---|
-| `AMD_LOG_LEVEL=3` (or `4`) | HIP runtime API + kernel logging |
-| `HSA_ENABLE_DEBUG=1` | HSA-level debug info |
-| `FLASHINFER_JIT_VERBOSE=1` | verbose JIT build (amd-flashinfer) |
-| `dmesg | grep -iE "amdgpu|kfd|vm_fault"` | kernel-level GPU faults (page faults, resets) |
-| `rocm-smi` | live clocks/power/temp/ECC; confirm the GPU didn't reset |
-
-## Per-symptom recipes
-
-| Symptom | Likely cause → fix |
-|---|---|
-| **Memory access fault by GPU** (`dmesg` shows `vm_fault`) | OOB indexing / bad pointer in a HIP solution. Re-run with `AMD_SERIALIZE_KERNEL=3 HIP_LAUNCH_BLOCKING=1`, then step in `rocgdb`. Check index/indptr tensors and grid/block bounds. |
-| **NaN / Inf in output** | fast-math (`-ffast-math` re-adds `-fno-finite-math-only`), uninitialized LDS, or a reduction-order difference. Compare against the reference in fp32; disable fast-math to isolate. |
-| **HIP OOM** | reduce batch/workload size or free the cache: `rm -rf ~/.cache/flashinfer/` is unrelated (that's JIT); use smaller shapes or fewer parallel workers (test parallelism halves the effective GPU count). |
-| **FP8 dtype mismatch** | AMD uses `_fnuz` FP8 (`float8_e4m3fnuz` / `float8_e5m2fnuz`), not NVIDIA `_fn`. Fix the solution's dtypes, not the tolerance. |
-| **Correctness fails only on AMD (fp8/bf16)** | rounding/reduction-order difference — tune evaluator tolerances per dtype (see [`benchmark-on-rocm`](../benchmark-on-rocm/SKILL.md)), don't loosen blindly. |
-| **AITER `ImportError`** | AITER not installed / ROCm-version mismatch → re-run [`rocm-setup`](../rocm-setup/SKILL.md); AITER imports call `git` (ensure git present + `safe.directory '*'`). |
-| **AITER `ValueError`/`RuntimeError`** | the op/shape/dtype is outside AITER coverage — the generator should have returned `None`; fall through to Triton/HIP ([`generate-aiter-solution`](../generate-aiter-solution/SKILL.md)). |
-| **Build fails with `nvcc`/`libcuda` errors** | a CUDA-only flag leaked into a builder; remove unconditional `-lcuda -lcublas` and let hipcc/tvm-ffi pick HIP libs (see [`author-hip-solution`](../author-hip-solution/SKILL.md)). |
-| **Stale build after env change** | JIT `build.ninja` is only rewritten when missing — clear it: `rm -rf ~/.cache/flashinfer/`. |
-
-## Interactive debugging
+HIP launches are async, so a Python traceback points at the wrong line. For any unknown fault, set
+these **before** running so the report pins to the actual faulting kernel:
 
 ```bash
-# rocgdb is the ROCm gdb; wait-for-debugger lets you attach before the kernel runs
-ROCM_DEBUG_WAIT_FOR_DEBUGGER=1 python -m flashinfer_bench run ... &
-rocgdb -p <pid>
+export AMD_SERIALIZE_KERNEL=3   # wait before AND after each kernel — localizes the fault
+export HIP_LAUNCH_BLOCKING=1    # synchronous launches — tracebacks land on the right call
 ```
 
-## What ROCm does not have
+Both are near-zero-overhead; leave them on while iterating on a new kernel. For an in-script view of
+what's being passed, print `t.shape, t.dtype, t.device, t.is_contiguous()` and call
+`torch.cuda.synchronize()` immediately before the suspect op.
 
-- **`compute-sanitizer` / `cuda-gdb` have no full ROCm analog.** `memcheck` is partially covered by
-  an LLVM AddressSanitizer-instrumented HIP build (`-fsanitize=address`) and `rocgdb`;
-  `racecheck` / `synccheck` / `initcheck` are **unsupported** — don't wait for them. This is a known
-  gap (`ROCM_PORT_PLAN.md` §3.10, risk #2); the bench sanitizer agent degrades gracefully and returns
-  an explicit "unsupported on ROCm" per check.
+## Per-error recipe
+
+| Symptom | First check |
+|---|---|
+| `Memory access fault by GPU node-N` / `hipErrorIllegalAddress` / "CUDA error: illegal memory access" (torch-ROCm reports HIP errors as "CUDA") | Run with the env combo above; print shapes/dtypes/strides just before the call. Verify `is_contiguous()` where required, all tensors on the same `cuda:N`, index tensors (`kv_indices`) within `[0, num_pages)`, and matching `head_dim` between Q and KV. Then `sudo dmesg -T | tail -50`. |
+| NaN / Inf in outputs | Wrap with `torch.isnan(t).any()` / `torch.isinf(t).any()`. Causes on CDNA: `_fnuz` FP8 has a different representable range than NVIDIA OCP FP8, so scales calibrated on NVIDIA refs overflow; `-inf` sentinel from a prior op fed into `exp`; or `torch.empty` used where `torch.zeros` was needed. |
+| `HIP out of memory` | `rocm-smi --showmeminfo vram --showpids` → kill zombies. JIT-compile spike → `MAX_JOBS=1`. Other tenant → `HIP_VISIBLE_DEVICES=N`. Reduce workload/batch size. |
+| `expected scalar type X but found Y` at an FP8 callsite | torch dtype for AMD FP8 is `torch.float8_e4m3fnuz` / `torch.float8_e5m2fnuz`, **not** `torch.float8_e4m3fn` (NVIDIA OCP). A callsite expecting `_fn` mis-dispatches on ROCm. |
+| `backend="aiter"` `ValueError` before launch | `kv_layout != "NHD"` — only NHD is allowed (raised in the prefill wrapper's `plan()`). |
+| `backend="aiter"` `RuntimeError` | non-gfx942/gfx950 GPU. |
+| `backend="aiter"` `ImportError` | `amd-aiter` not installed → `pip install amd-aiter --index-url https://pypi.amd.com/simple/` (or the version pinned by `docker/rocm/`). AITER also calls `git` at import — ensure git present + `git config --global --add safe.directory '*'`. |
+| `backend="aiter"` hard GPU fault mid-kernel | `amd-aiter` version mismatch vs ROCm. Reinstall matching your ROCm version; run the default HIP backend to confirm the bug is in AITER, not the caller. |
+| Build fails citing `nvcc` / `libcuda` | a CUDA-only flag leaked into a builder — drop unconditional `-lcuda -lcublas`, let hipcc/tvm-ffi choose HIP libs. See [`author-hip-solution`](../author-hip-solution/SKILL.md). |
+| Stale build after an env/flag change | JIT `build.ninja` is only (re)written when missing — env changes are silent no-ops. Clear the cache: `rm -rf ~/.cache/flashinfer/`. |
+
+## ROCm tooling
+
+| Tool | Use |
+|---|---|
+| `rocgdb --args python my_script.py` | cuda-gdb equivalent. Inside: `catch throw`, `run`, `bt`, `info agents`, `info wavefronts`. |
+| `ROCM_DEBUG_WAIT_FOR_DEBUGGER=1` | process blocks at first GPU API call until `rocgdb -p <pid>` attaches. |
+| `AMD_LOG_LEVEL=3` (or `4`) | HIP API + stream trace. Linear under `HIP_LAUNCH_BLOCKING=1`, so each Python call maps 1:1 to HIP launches. |
+| `HSA_ENABLE_DEBUG=1` | HSA-layer trace (queues, agents — one below HIP). |
+| `sudo dmesg -T \| grep -iE 'amdgpu\|kfd\|vm_fault'` | `VM_CONTEXT1_PROTECTION_FAULT_STATUS` gives page-fault class, access type, and offending address when Python only says `hipErrorIllegalAddress`. |
+| `watch -n 1 'rocm-smi --showuse --showmeminfo vram --showpids'` | hang diagnosis: 100% GPU + no SQ activity = looping kernel; VRAM pinned after exit = another process holds it. |
+| `FLASHINFER_JIT_VERBOSE=1` | verbose JIT build output (amd-flashinfer). |
+
+`compute-sanitizer` / `cuda-gdb` have **no direct ROCm equivalent.** The closest workflow is the
+env-var combo + `rocgdb`; `memcheck` is partially covered by an LLVM-ASan-instrumented HIP build
+(`-fsanitize=address`). `racecheck`/`synccheck`/`initcheck` are unsupported (`ROCM_PORT_PLAN.md`
+§3.10, risk #2) — the bench sanitizer agent degrades gracefully and returns "unsupported on ROCm".
+
+## AMD gotchas
+
+- **PyTorch ROCm masquerade.** Device strings show `cuda:0` on AMD; "CUDA error" messages may be
+  HIP errors. `tensor.device.type == "cuda"` is `True` on AMD — never test for `"hip"`. The
+  unambiguous arch field is `torch.cuda.get_device_properties(0).gcnArchName`.
+- **Wavefront = 64**, not 32 — on both gfx942 and gfx950. A representative-thread `printf` ported
+  from CUDA needs `threadIdx.x % 64 == 0` (or use the `warpSize` builtin).
+- **HIP installs are stripped.** `rocgdb` reports `no symbol table loaded` unless you rebuild the op
+  with `-g` (append `"-O0","-g"` via the solution's `extra_cuda_cflags`, then clear
+  `~/.cache/flashinfer/`). A generic `FLASHINFER_JIT_DEBUG`-style flag does **not** add debug flags
+  on the HIP path.
+- **Device `printf` flushes on `torch.cuda.synchronize()`** — same as CUDA.
+- **`HIP_VISIBLE_DEVICES`** is the canonical AMD scoping var (`ROCR_VISIBLE_DEVICES` one layer
+  deeper); torch also honors `CUDA_VISIBLE_DEVICES`.
+
+## Quick recipes
+
+```bash
+# Hard GPU fault — localize it
+export AMD_SERIALIZE_KERNEL=3 HIP_LAUNCH_BLOCKING=1
+python my_script.py          # traceback now points at the faulting call
+sudo dmesg -T | tail -50     # page-fault class / address
+
+# Step into a kernel
+export AMD_SERIALIZE_KERNEL=3 HIP_LAUNCH_BLOCKING=1
+rocgdb --args python my_script.py
+# (rocgdb) catch throw ; run ; bt ; info wavefronts
+
+# HIP API trace
+AMD_LOG_LEVEL=3 HIP_LAUNCH_BLOCKING=1 python my_script.py 2> hip.trace
+# grep hipLaunchKernel / hipMemcpy / error in hip.trace
+```
 
 ## Maintaining this document
 
 Update when new AITER error modes appear, when the sanitizer agent (`agents/sanitizer.py`) gains
-ROCm coverage (§3.10), or when JIT/cache behavior changes.
+ROCm coverage (§3.10), or when JIT/cache debug behavior changes.
 
 ## See Also
 
-- [rocm-setup](../rocm-setup/SKILL.md) — validate the environment first
-- [benchmark-on-rocm](../benchmark-on-rocm/SKILL.md) — tolerances & timing
-- [author-hip-solution](../author-hip-solution/SKILL.md) — build-side issues
+- [rocm-setup](../rocm-setup/SKILL.md) — validate the environment first (`validate_p0.py`)
+- [benchmark-on-rocm](../benchmark-on-rocm/SKILL.md) — tolerances, AITER fallback conditions
+- [author-hip-solution](../author-hip-solution/SKILL.md) — build-side faults, debug builds
+- [generate-aiter-solution](../generate-aiter-solution/SKILL.md) — AITER coverage/fallthrough
 - [ROCM_PORT_PLAN.md](../../../ROCM_PORT_PLAN.md) §3.10 — profiling/debug agents
