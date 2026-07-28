@@ -202,7 +202,7 @@ Kernel inventory:
 ## Output: run-manifest contract
 
 When `--manifest <path>` is set, write/update a JSON file with this shape (the same manifest
-consumed by `/onboard-model` and `/submit-onboarding-prs`):
+consumed by `/onboard-model`, including its Phase 4 PR submission):
 
 ```json
 {
@@ -248,4 +248,3 @@ Existing entries written by later phases (`phase2_status`, `phase3_status`, `wor
 - [onboard-model](../onboard-model/SKILL.md) — full pipeline that consumes this skill's output
 - [track-models](../track-models/SKILL.md) — config-field and per-op-type formula reference
 - [clone-repos](../clone-repos/SKILL.md) — must run first
-- [submit-onboarding-prs](../submit-onboarding-prs/SKILL.md) — Phase 4 counterpart

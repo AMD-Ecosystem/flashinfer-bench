@@ -25,7 +25,7 @@ chains them together via a shared run manifest.
 | 1 | [`/discover-models`](../discover-models/SKILL.md) | manifest `kernels[]` populated with `phase1_status`, `fi_status`, `fi_trace_template`, `sgl_status` |
 | 2 | [`/extract-kernel-definitions`](../extract-kernel-definitions/SKILL.md) (+ inline `gh issue create` for `fi_missing`) | definition JSONs in `tmp/flashinfer-trace/definitions/` — auto-dumped via `FLASHINFER_TRACE_DUMP=1` for kernels with `fi_trace_template=true`, otherwise hand-written; manifest `phase2_status=done` (and `fi_issue_url` for fi_missing) |
 | 3 | [`/collect-workloads`](../collect-workloads/SKILL.md) (+ inline SGLang PR for `sgl_missing`) | workloads + blobs in `tmp/flashinfer-trace/`; manifest `phase3_status=done` |
-| 4 | [`/submit-onboarding-prs`](../submit-onboarding-prs/SKILL.md) | one HF PR + one bench PR per definition; manifest `phase4` populated |
+| 4 | Submit PRs (inline — see [Phase 4](#phase-4-submit-prs)) | one HF dataset PR + one coverage-doc PR per definition; manifest `phase4` populated |
 
 The state contract between skills is the run manifest at
 `tmp/onboard_{model_slug}_{date}.json` — see "Run manifest" below.
@@ -288,18 +288,23 @@ Mark `phase3_status=done` and record `workload_entries`.
 
 ## Phase 4: Submit PRs
 
-Delegate to [`submit-onboarding-prs`](../submit-onboarding-prs/SKILL.md). It creates the
-per-definition worktrees, spawns one agent per definition, and opens PR 2 (HuggingFace
-dataset) followed by PR 1 (flashinfer-bench coverage doc) for each.
+For each definition that is "ready" (definition JSON written, workloads collected, baseline eval
+passing), open **two atomic PRs** — one definition = one pair of PRs, never batched:
 
-```bash
-/submit-onboarding-prs --manifest tmp/onboard_{model_slug}_{date}.json
-```
+1. **PR 2 — HuggingFace `flashinfer-ai/flashinfer-trace`** (open first): definition JSON +
+   reference test + baseline solution + workload JSONL + safetensors blobs + eval traces (every
+   entry `evaluation.status == "PASSED"`). The dataset is arch-agnostic and stays upstream.
+2. **PR 1 — GitHub `AMD-Ecosystem/flashinfer-bench`, base `amd-integration`** (open second, links to
+   PR 2): the `docs/model_coverage.mdx` update **only**. Use
+   [`rocm-pr-workflow`](../rocm-pr-workflow/SKILL.md) for the fail-closed PR-target check.
 
-The skill writes back to the manifest's `phase4` block with the resulting PR URLs.
+Run each definition in its own worktree so they can proceed in parallel; write the resulting PR
+URLs back to the manifest's `phase4` block. `fi_missing` definitions skip PR 2 (no
+workloads/baseline/traces) and note the FlashInfer kernel-request issue in PR 1.
 
-The PR Review Checklist and Agent TASK.md template both live inside that skill — refer to
-`submit-onboarding-prs/SKILL.md` rather than duplicating them here.
+> **ROCm / AMD fork note.** PR 2's dataset artifacts are collected on an **NVIDIA** host (Phases 2–3);
+> Phase 4 only publishes them. PR 1's coverage-doc change targets this fork — see
+> [`rocm-pr-workflow`](../rocm-pr-workflow/SKILL.md).
 
 ---
 
@@ -387,7 +392,12 @@ skips any kernel/phase already marked `done` — phases resume from the first in
   definition's `fi_api` tag.
 
 ### Phase 4 PR creation fails
-- See [`submit-onboarding-prs`](../submit-onboarding-prs/SKILL.md) "Error Handling".
+- **HuggingFace PR (PR 2)**: requires `huggingface_hub` authenticated with write access to
+  `flashinfer-ai/flashinfer-trace`. Fall back to opening the PR manually from the worktree.
+- **GitHub PR (PR 1)**: requires `gh` authenticated with write access to
+  `AMD-Ecosystem/flashinfer-bench` (base `amd-integration`) — see
+  [`rocm-pr-workflow`](../rocm-pr-workflow/SKILL.md). Print the diff and PR body for manual
+  submission if it fails.
 
 ---
 
@@ -420,6 +430,6 @@ so the manifest stays in sync.
 - [discover-models](../discover-models/SKILL.md)
 - [extract-kernel-definitions](../extract-kernel-definitions/SKILL.md)
 - [collect-workloads](../collect-workloads/SKILL.md)
-- [submit-onboarding-prs](../submit-onboarding-prs/SKILL.md)
-- [add-reference-tests](../add-reference-tests/SKILL.md) (used inside `submit-onboarding-prs`)
+- [add-reference-tests](../add-reference-tests/SKILL.md) (reference test that ships in Phase 4's PR 2)
+- [rocm-pr-workflow](../rocm-pr-workflow/SKILL.md) (Phase 4 coverage-doc PR target)
 - [track-models](../track-models/SKILL.md) (per-op-type formula reference for Phase 1)
