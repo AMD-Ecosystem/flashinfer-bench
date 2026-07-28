@@ -260,7 +260,7 @@ reason against the external dataset
 Start with `.claude/skills/`. Each subdirectory contains a `SKILL.md` with full instructions. This
 fork keeps a lean, ROCm-benchmark-focused set (see the
 [ROCm / AMD CDNA Fork](#rocm--amd-cdna-fork) section). To just run a benchmark, chain the first
-three; see [`ROCM_QUICKSTART.md`](ROCM_QUICKSTART.md).
+three; see the [README quickstart](README.md).
 
 - **rocm-setup**: Build/run the `docker/rocm/` dev container, install AITER, and run the P0/AITER
   validation scripts on gfx942
