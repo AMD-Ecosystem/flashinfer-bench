@@ -208,20 +208,6 @@ Key conventions:
 
 Refer to `docs/flashinfer-trace/definition.mdx` for the complete schema documentation.
 
-## Documentation Structure (`docs/`)
-
-```
-docs/
-├── Getting Started        # index, installation, quickstart
-├── Tutorials              # run-benchmark, cli, server-api, bring-your-own-kernel
-├── FlashInfer Trace       # definition, workload, solution, trace schemas
-├── Dataset                # model_coverage
-└── Op Type Reference      # per-op-type specs (gemm, gqa, mla, moe, sampling, ...)
-```
-
-Navigation is defined in `docs/docs.json`. Page files live under `docs/start/`,
-`docs/tutorials/`, `docs/flashinfer-trace/`, and `docs/op-types/`.
-
 ## Where To Look By Task
 
 ### Understanding data structures
@@ -238,16 +224,6 @@ Start with `flashinfer_bench/bench/` for the benchmarking engine, and
 
 Start with `flashinfer_bench/apply/`. The `apply(...)` function is the shared entry point
 for both optimized kernel dispatch and workload tracing.
-
-### Model coverage or web metadata
-
-Start with `web/apps/web/data/` for the web UI data layer, and `docs/` for
-model coverage documentation.
-
-### Benchmark service behavior
-
-Start with `flashinfer_bench/serve/`. This subsystem exposes benchmark orchestration as
-a service — it is **not** an inference server.
 
 ### Dataset-facing questions
 
@@ -291,31 +267,11 @@ evaluation results as traces.
 It is not. The serve subsystem is a benchmark orchestration service over dataset-backed
 workloads.
 
-## Contributing New Operation Types
-
-To add a new op_type beyond what currently exists:
-
-1. Create operation documentation in `docs/op-types/`
-2. Create Definition JSON files under `tmp/flashinfer-trace/definitions/{new_op_type}/`
-   (the HuggingFace dataset clone — submit via a PR to `flashinfer-ai/flashinfer-trace`)
-3. Provide a Python reference implementation in the definition's `reference` field
-4. Create Solution implementations (Triton/CUDA optimized)
-5. Optionally create a FlashInfer adapter in `flashinfer_bench/integration/`
-
-The existing op_type directories under `tmp/flashinfer-trace/definitions/` serve as templates.
-
 ## Maintenance Notes
 
-Update `CLAUDE.md` when any of the following change:
-
-- The internal vs external trace boundary or sync lifecycle
-- Repository directory structure
-- Core concept definitions
-- The definition JSON schema conventions
-
-Update the relevant `.claude/skills/*.md` files when task procedures change.
-Keep this file focused on repo-level context. Skill-specific procedures and
-op_type-specific details belong in their respective skill files.
+Keep this file focused on repo-level context — update it when the ROCm setup, repository
+structure, or core concepts change, and update `.claude/skills/*.md` when a skill's procedure
+changes. Skill-specific and op_type-specific detail belongs in the skills, not here.
 
 ## References
 
