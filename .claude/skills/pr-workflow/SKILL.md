@@ -11,9 +11,9 @@ description: How to create and edit PRs on the AMD-Ecosystem/flashinfer-bench Gi
 ## CRITICAL: PR target safeguard (fail-closed)
 
 `AMD-Ecosystem/flashinfer-bench` is a **GitHub fork** of `flashinfer-ai/flashinfer-bench` (the true
-upstream). Because of this, `gh pr create` defaults the PR base to the fork-parent
-`flashinfer-ai/flashinfer-bench` unless explicitly overridden. **A PR must NEVER be opened against
-`flashinfer-ai/flashinfer-bench`.**
+upstream). Because of this, `gh pr create` defaults the **base repository** (the PR target) to the
+fork parent `flashinfer-ai/flashinfer-bench` unless explicitly overridden. **A PR must NEVER be
+opened against `flashinfer-ai/flashinfer-bench`.**
 
 All PRs go to **`AMD-Ecosystem/flashinfer-bench`**, base branch **`amd-integration`**.
 
@@ -119,12 +119,13 @@ gh api repos/AMD-Ecosystem/flashinfer-bench/pulls/<number> --method PATCH --fiel
 
 Run this gate on the branch's full diff before `gh pr create`, in order:
 
-1. **Simplify / make production-ready.** Review all changes on the branch and run `/simplify`: remove
-   dead code, debug/scratch code, debug-only comments, and unused imports. Keep comments that carry
-   real value (the *why*, hidden constraints, non-obvious invariants) — do not strip those.
+1. **Simplify / make production-ready.** Review all changes on the branch and remove dead code,
+   debug/scratch code, debug-only comments, and unused imports. Keep comments that carry real value
+   (the *why*, hidden constraints, non-obvious invariants) — do not strip those. (If a `/simplify`
+   command is configured in your environment, use it; it is not required.)
 
-2. **Code review.** Run `/code-review` on the diff, then apply the suggestions and recommendations you
-   judge worthwhile.
+2. **Code review.** Self-review the full diff for correctness and quality, then apply the fixes worth
+   making. (If a `/code-review` command is configured, use it; it is not required.)
 
 3. **Run the relevant tests.** Run the pytests covering the changed code (see CLAUDE.md for commands,
    e.g. `pytest -n auto --reruns 2 -m "not slow"`) and make sure there are no failures after the
