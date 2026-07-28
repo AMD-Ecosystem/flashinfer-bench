@@ -15,7 +15,11 @@ upstream PR. Failing to open a PR is always better than opening it against upstr
 
 1. **Base is always `amd-integration`** on `AMD-Ecosystem/flashinfer-bench`. Never `main`, never
    `flashinfer-ai/*`.
-2. **Never PR *from* `amd-integration`** — it is the base, never the head (recovery below).
+2. **`amd-integration` is base-only — never push it, never PR from it.** Never `git push` to the
+   remote `amd-integration`, and never open a PR with `amd-integration` as the head. To ship any
+   change, first create a topic branch off `origin/amd-integration`
+   (`git checkout -b <topic> origin/amd-integration`) and push/PR **that** branch. If you already
+   committed on a local `amd-integration`, use the recovery below.
 3. **Always pass `--repo AMD-Ecosystem/flashinfer-bench --base amd-integration` explicitly.** Don't
    rely on `gh` defaults.
 4. **Exception:** the *dataset* PR (HuggingFace `flashinfer-ai/flashinfer-trace`) is arch-agnostic
@@ -93,8 +97,14 @@ body ("Stacked on #N; diff reduces once #N merges"). Don't set the base to the p
    claiming a run.
 4. **Commit.** Then run the pre-flight safeguards and `gh pr create`.
 
-Pushing/creating PRs publishes to a shared repo — confirm with the user before `git push` / `gh pr
-create` unless already authorized.
+## CRITICAL: ask before pushing to remote (fail-closed)
+
+**Never `git push` (or `gh pr create`, which pushes) without first getting the user's explicit "yes"
+for that specific push.** It publishes to a shared repo. Applies to every push — the initial branch
+push, force-pushes after a rebase, and follow-up pushes addressing review comments; a prior "yes"
+does not authorize a later push. State what will be pushed and where (branch → `AMD-Ecosystem/
+flashinfer-bench`) and wait. Local-only work (commits, the quality gate, the local Copilot review)
+needs no confirmation — only the network push does. When in doubt, hold the push and ask.
 
 ## After creating: resolve automated review
 
