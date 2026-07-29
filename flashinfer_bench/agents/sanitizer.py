@@ -184,6 +184,6 @@ def flashinfer_bench_run_sanitizer(
             )
 
         out += f"\n{'=' * 60}\nSanitizer checks complete\n{'=' * 60}\n"
-        if max_lines:
+        if max_lines is not None:
             out = _truncate_output(out, max_lines)
         return out

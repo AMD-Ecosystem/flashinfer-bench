@@ -99,10 +99,10 @@ def function_to_schema(func: Callable) -> dict:
     Examples
     --------
     >>> from flashinfer_bench.agents.schema import function_to_schema
-    >>> from flashinfer_bench.agents import flashinfer_bench_run_ncu
-    >>> schema = function_to_schema(flashinfer_bench_run_ncu)
+    >>> from flashinfer_bench.agents import flashinfer_bench_run_rocprof
+    >>> schema = function_to_schema(flashinfer_bench_run_rocprof)
     >>> print(schema["name"])
-    flashinfer_bench_run_ncu
+    flashinfer_bench_run_rocprof
     """
     # Parse docstring
     doc = docstring_parser.parse(func.__doc__ or "")
@@ -171,8 +171,8 @@ def get_all_tool_schemas() -> List[dict]:
     >>> schemas = get_all_tool_schemas()
     >>> for s in schemas:
     ...     print(s["name"])
-    flashinfer_bench_list_ncu_options
-    flashinfer_bench_run_ncu
+    flashinfer_bench_list_rocprof_options
+    flashinfer_bench_run_rocprof
     flashinfer_bench_run_sanitizer
     """
     from flashinfer_bench.agents.rocprof import (

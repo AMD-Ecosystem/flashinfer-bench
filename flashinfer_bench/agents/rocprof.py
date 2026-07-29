@@ -161,7 +161,7 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
         lines += ["", f"Hardware counters ({len(pmc)} rows) — see counter_collection CSV."]
 
     out = "\n".join(lines)
-    if max_lines:
+    if max_lines is not None:
         parts = out.split("\n")
         if len(parts) > max_lines:
             out = "\n".join(parts[:max_lines]) + f"\n[... {len(parts) - max_lines} more lines]"
@@ -247,6 +247,7 @@ def flashinfer_bench_run_rocprof(
         data_dir = tmp_path / "data"
         out_dir = tmp_path / "out"
         data_dir.mkdir()
+        out_dir.mkdir()  # rocprofv3 -d target; create explicitly rather than rely on the tool
         (data_dir / "definition.json").write_text(definition.model_dump_json())
         (data_dir / "solution.json").write_text(solution.model_dump_json())
         (data_dir / "workload.json").write_text(workload.model_dump_json())
