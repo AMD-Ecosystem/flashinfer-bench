@@ -32,7 +32,8 @@ def check(name: str):
 def _():
     import torch
 
-    assert torch.cuda.is_available(), "torch.cuda.is_available() is False"
+    if not torch.cuda.is_available():
+        raise RuntimeError("torch.cuda.is_available() is False")
     name = torch.cuda.get_device_name(0)
     arch = torch.cuda.get_device_properties(0).gcnArchName
     return f"torch={torch.__version__} hip={torch.version.hip} dev='{name}' arch={arch}"
@@ -111,7 +112,8 @@ TVM_FFI_DLL_EXPORT_TYPED_FUNC(add_one, add_one);
         mod.add_one(t)
         torch.cuda.synchronize()
         ok = bool((t == 2.0).all().item())
-        assert ok, "add_one kernel did not increment tensor"
+        if not ok:
+            raise RuntimeError("add_one kernel did not increment tensor")
         return f"compiled+ran HIP kernel via tvm-ffi at {os.path.basename(lib)}"
 
 

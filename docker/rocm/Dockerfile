@@ -108,7 +108,7 @@ RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
     # The repo is bind-mounted from the host (owned by the host user) but the
     # container runs as root; allow git to operate on it regardless of owner so
     # setuptools_scm's git introspection works during the editable install.
-    && git config --system --add safe.directory '*'
+    && git config --system --add safe.directory /workspace
 
 # Still pin the version so setuptools_scm produces a stable version without
 # needing repo tags in the bind-mounted source.
