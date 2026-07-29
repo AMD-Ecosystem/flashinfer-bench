@@ -2,11 +2,16 @@
 
 from .ffi_prompt import FFI_PROMPT, FFI_PROMPT_SIMPLE
 from .ncu import flashinfer_bench_list_ncu_options, flashinfer_bench_run_ncu
+from .rocprof import flashinfer_bench_list_rocprof_options, flashinfer_bench_run_rocprof
 from .sanitizer import flashinfer_bench_run_sanitizer
 from .schema import function_to_schema, get_all_tool_schemas
 from .solution_handler import extract_solution_to_files, pack_solution_from_files
 
 __all__ = [
+    # ROCm profiling (rocprofv3). Preferred on AMD GPUs.
+    "flashinfer_bench_list_rocprof_options",
+    "flashinfer_bench_run_rocprof",
+    # NVIDIA Nsight Compute (kept for compatibility; unavailable on ROCm).
     "flashinfer_bench_list_ncu_options",
     "flashinfer_bench_run_ncu",
     "flashinfer_bench_run_sanitizer",

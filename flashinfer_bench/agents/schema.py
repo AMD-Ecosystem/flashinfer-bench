@@ -175,15 +175,16 @@ def get_all_tool_schemas() -> List[dict]:
     flashinfer_bench_run_ncu
     flashinfer_bench_run_sanitizer
     """
-    from flashinfer_bench.agents.ncu import (
-        flashinfer_bench_list_ncu_options,
-        flashinfer_bench_run_ncu,
+    from flashinfer_bench.agents.rocprof import (
+        flashinfer_bench_list_rocprof_options,
+        flashinfer_bench_run_rocprof,
     )
     from flashinfer_bench.agents.sanitizer import flashinfer_bench_run_sanitizer
 
+    # ROCm-only fork: expose the rocprofv3-based profiler (NCU has no AMD equivalent).
     tools = [
-        flashinfer_bench_list_ncu_options,
-        flashinfer_bench_run_ncu,
+        flashinfer_bench_list_rocprof_options,
+        flashinfer_bench_run_rocprof,
         flashinfer_bench_run_sanitizer,
     ]
 
