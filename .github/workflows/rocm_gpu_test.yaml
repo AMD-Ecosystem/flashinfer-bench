@@ -22,6 +22,12 @@ on:
 jobs:
   rocm-gpu-test:
     name: ROCm GPU tests (gfx942)
+    # Security guard: only run for repo-owned branches, never for forked-PR code — a self-hosted
+    # GPU runner must not execute untrusted PRs. Keep this even if the pull_request trigger is
+    # enabled above.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, rocm]
     timeout-minutes: 90
     steps:

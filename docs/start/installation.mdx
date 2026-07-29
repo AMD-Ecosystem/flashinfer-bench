@@ -31,8 +31,12 @@ pip install -v -e .
 ## AMD ROCm / CDNA GPUs
 
 On AMD Instinct GPUs (CDNA3 gfx942 — MI300X/MI325X; CDNA4 gfx950 additive), the GPU dependencies
-come from AMD's package indexes rather than PyPI. The supported, reproducible path is the ROCm dev
-container:
+come from AMD's package indexes rather than PyPI.
+
+> ROCm support (the `docker/rocm/` container and the `[rocm]` extra) lives in the ROCm fork/branch,
+> `AMD-Ecosystem/flashinfer-bench` — clone that (not the upstream URL above) to get these scripts.
+
+The supported, reproducible path is the ROCm dev container:
 
 ```bash
 # Build and enter the ROCm dev image (ROCm 7.2 + torch-ROCm + amd-flashinfer + amd_aiter + tvm-ffi)
@@ -47,7 +51,10 @@ See `docker/rocm/README.md` for details. To install into an existing ROCm enviro
 # 1) ROCm build of torch (match your ROCm version). The Radeon URL is a find-links page
 #    (not a PEP 503 index), so use -f to keep PyPI available for torch's pure-python deps.
 pip install torch -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2/
-# 2) flashinfer-bench + ROCm extras (amd-flashinfer imports as `flashinfer`; amd_aiter for AITER)
+# 2) flashinfer-bench + ROCm extras. The two AMD wheels are published under different, ROCm-version-
+#    specific index paths (mirrors docker/rocm/Dockerfile) — don't mix versions:
+#      amd-flashinfer (imports as `flashinfer`) -> rocm-7.2.0 index
+#      amd_aiter (AITER-backed solutions)       -> rocm-7.1.1 index
 pip install "flashinfer-bench[rocm]" \
     --extra-index-url https://pypi.amd.com/rocm-7.2.0/simple/ \
     --extra-index-url https://pypi.amd.com/rocm-7.1.1/simple/

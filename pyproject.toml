@@ -59,12 +59,14 @@ dev = [
   "setuptools",
 ]
 serve = ["fastapi>=0.100.0", "uvicorn[standard]>=0.20.0"]
-# ROCm / AMD GPU runtime. These wheels live on AMD's package index (not PyPI), so install with the
-# matching extra-index-urls, e.g.:
+# ROCm / AMD GPU runtime. These wheels live on AMD's package index (not PyPI). They are versioned
+# per ROCm release and the two packages are published under different index paths — pin the indexes
+# that match your ROCm version to avoid mixing incompatible wheels. The values below mirror
+# docker/rocm/Dockerfile (ROCm 7.2): `amd-flashinfer` from the rocm-7.2.0 index, `amd_aiter` from
+# the rocm-7.1.1 index. `amd-flashinfer` imports as `flashinfer`; `amd_aiter` powers AITER solutions.
 #   pip install "flashinfer-bench[rocm]" \
-#     --extra-index-url https://pypi.amd.com/rocm-7.2.0/simple/ \
-#     --extra-index-url https://pypi.amd.com/rocm-7.1.1/simple/
-# (amd-flashinfer imports as `flashinfer`; amd_aiter powers the AITER-backed solutions.)
+#     --extra-index-url https://pypi.amd.com/rocm-7.2.0/simple/   # amd-flashinfer \
+#     --extra-index-url https://pypi.amd.com/rocm-7.1.1/simple/   # amd_aiter
 rocm = ["amd-flashinfer", "amd_aiter"]
 
 [project.scripts]

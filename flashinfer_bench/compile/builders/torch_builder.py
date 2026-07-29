@@ -191,10 +191,13 @@ class TorchBuilder(Builder):
 class DependencyManager:
     """Dependency manager for CUDA dependencies. Not used for now."""
 
+    # NOTE: this manager is currently unused (see build() above). The CUTLASS entry was dropped
+    # in the ROCm port along with the NVIDIA/cutlass submodule — the package
+    # `flashinfer_bench.third_party.cutlass` it pointed at does not exist. If this manager is ever
+    # re-enabled it must be ported to ROCm libraries (hipBLAS/rocBLAS, MIOpen, CK/rocWMMA).
     _CUDA_DEPS: ClassVar[Dict[str, Tuple[str, Optional[List[str]]]]] = {
         "cublas": ("nvidia.cublas", ["cublas", "cublasLt"]),
         "cudnn": ("nvidia.cudnn", ["cudnn"]),
-        "cutlass": ("flashinfer_bench.third_party.cutlass", None),  # Header-only dependency
     }
     """CUDA dependencies and their package names and library names"""
 
