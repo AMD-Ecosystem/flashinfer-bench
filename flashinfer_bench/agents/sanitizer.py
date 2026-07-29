@@ -1,10 +1,16 @@
-"""Compute-sanitizer tool"""
+"""Memory/correctness checking tool for LLM agents (ROCm best-effort).
+
+NVIDIA's compute-sanitizer has no full ROCm equivalent. This tool provides a best-effort
+"memcheck" by running the solution and detecting GPU memory faults reported by the HIP runtime
+(illegal address / page fault / HSA memory fault). The race/sync/init sub-tools have no ROCm
+counterpart and return a clear "unsupported" message rather than failing, so agents degrade
+gracefully. The JSON-serializable, "ERROR:"-prefixed contract matches the previous tool.
+"""
 
 from __future__ import annotations
 
 import logging
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,17 +24,30 @@ logger = logging.getLogger(__name__)
 SanitizerType = Literal["memcheck", "racecheck", "initcheck", "synccheck"]
 VALID_SANITIZER_TYPES: set[SanitizerType] = {"memcheck", "racecheck", "initcheck", "synccheck"}
 
+# Sub-tools with no ROCm equivalent (compute-sanitizer racecheck/initcheck/synccheck).
+_UNSUPPORTED_ON_ROCM: set[SanitizerType] = {"racecheck", "initcheck", "synccheck"}
 
-def _build_sanitizer_command(
-    sanitizer_type: SanitizerType,
-    data_dir: Path,
-    device: str,
-    trace_set_path: Optional[Path],
-    sanitizer_path: str,
-) -> List[str]:
-    cmd = [sanitizer_path, "--tool", sanitizer_type]
+# HIP/HSA runtime signatures indicating a GPU memory fault.
+_MEM_FAULT_SIGNATURES = (
+    "Memory access fault",
+    "HSA_STATUS_ERROR_MEMORY_FAULT",
+    "page fault",
+    "hipErrorIllegalAddress",
+    "an illegal memory access",
+    "invalid device ordinal",
+)
 
-    runner_cmd = [
+
+def _truncate_output(output: str, max_lines: int) -> str:
+    lines = output.split("\n")
+    if len(lines) <= max_lines:
+        return output
+    return "\n".join(lines[:max_lines]) + f"\n[... {len(lines) - max_lines} more lines]"
+
+
+def _run_memcheck(data_dir: Path, device: str, trace_set_path: Optional[Path], timeout: int, env) -> str:
+    """Best-effort memcheck: run the solution and detect GPU memory faults."""
+    cmd = [
         sys.executable,
         "-u",
         "-m",
@@ -39,92 +58,89 @@ def _build_sanitizer_command(
         device,
     ]
     if trace_set_path:
-        runner_cmd.extend(["--trace-set-path", str(trace_set_path)])
+        cmd += ["--trace-set-path", str(trace_set_path)]
+    # HSA_XNACK=1 enables page-fault-based detection of out-of-bounds device accesses where the
+    # hardware/driver supports it (surfaces faults instead of silently reading garbage).
+    run_env = dict(env)
+    run_env.setdefault("HSA_XNACK", "1")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, env=run_env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return f"ERROR: memcheck run timed out after {timeout} seconds."
 
-    cmd.extend(runner_cmd)
-    return cmd
-
-
-def _truncate_output(output: str, max_lines: int) -> str:
-    """Truncate output to max_lines."""
-    lines = output.split("\n")
-    if len(lines) <= max_lines:
-        return output
-
-    truncated = lines[:max_lines]
-    remaining = len(lines) - max_lines
-    truncated.append(f"\n[Output truncated: {remaining} more lines, use max_lines=None to see all]")
-    return "\n".join(truncated)
+    combined = f"STDOUT:\n{r.stdout}\n\nSTDERR:\n{r.stderr}\nReturn code: {r.returncode}\n"
+    faults = [s for s in _MEM_FAULT_SIGNATURES if s.lower() in (r.stdout + r.stderr).lower()]
+    if faults or r.returncode != 0:
+        detail = f"detected fault signatures: {faults}" if faults else "non-zero exit"
+        return combined + f"\nMEMCHECK: FAIL — {detail}\n"
+    return combined + (
+        "\nMEMCHECK: no GPU memory fault detected.\n"
+        "NOTE: ROCm has no full compute-sanitizer equivalent; this only catches faults that abort "
+        "the process (illegal address / page fault). It does NOT detect benign OOB reads, "
+        "uninitialized memory, or races. For deeper checks, build the kernel with ROCm's LLVM "
+        "AddressSanitizer (-fsanitize=address, xnack) or inspect with rocgdb.\n"
+    )
 
 
 def flashinfer_bench_run_sanitizer(
     solution: Union[Solution, str],
     workload: Union[Workload, str],
     *,
-    # Runtime environment
     device: str = "cuda:0",
     trace_set_path: Optional[str] = None,
-    # Sanitizer configuration
     sanitizer_types: Optional[List[SanitizerType]] = None,
-    sanitizer_path: str = "compute-sanitizer",
-    # Execution control
     timeout: int = 300,
     tmpdir: Optional[str] = None,
     max_lines: Optional[int] = None,
 ) -> str:
-    """Run compute-sanitizer checks on a solution with a specific workload:
-    memcheck, racecheck, initcheck, synccheck.
+    """Run best-effort memory checks on a solution+workload (ROCm).
 
     Parameters
     ----------
     solution : Solution or str
-        The solution to check. Can be a Solution object or a path to a JSON file.
+        Solution object or path to a solution JSON file.
     workload : Workload or str
-        The workload configuration specifying input dimensions and data. Can be a
-        Workload object or a path to a JSON file.
-    device : str, optional
-        CUDA device to run on. Default is "cuda:0".
+        Workload object or path to a workload JSON file.
+    device : str
+        Device to run on ("cuda" device string on ROCm). Default "cuda:0".
     trace_set_path : str, optional
-        Path to the trace set. If not provided, uses FIB_DATASET_PATH environment variable.
+        Path to the trace set. Defaults to FIB_DATASET_PATH.
     sanitizer_types : List[SanitizerType], optional
-        List of sanitizer tools to run. Default runs all: memcheck, racecheck,
-        initcheck, synccheck.
-    sanitizer_path : str, optional
-        Path to the compute-sanitizer executable. Default is "compute-sanitizer".
-    timeout : int, optional
-        Timeout in seconds for each sanitizer check. Default is 300.
+        Which checks to run. Default ["memcheck"]. On ROCm only "memcheck" is supported
+        (best-effort); "racecheck"/"initcheck"/"synccheck" report as unsupported.
+    timeout : int
+        Timeout in seconds per check. Default 300.
     tmpdir : str, optional
-        Temporary directory. If not provided, uses system default.
+        Temporary directory.
     max_lines : int, optional
-        Maximum number of lines in output. If None, returns full output.
+        Truncate output to this many lines.
 
     Returns
     -------
     str
-        Sanitizer results as text, or error message starting with "ERROR:".
+        Results text, or an error string starting with "ERROR:".
     """
     if sanitizer_types is None:
-        sanitizer_types = list(VALID_SANITIZER_TYPES)
-
+        sanitizer_types = ["memcheck"]
     for st in sanitizer_types:
         if st not in VALID_SANITIZER_TYPES:
             return f"ERROR: Invalid sanitizer type '{st}'. Must be one of: {VALID_SANITIZER_TYPES}"
 
     if isinstance(solution, str):
-        path = Path(solution)
-        if not path.exists():
+        p = Path(solution)
+        if not p.exists():
             return f"ERROR: Solution file not found: {solution}"
         try:
-            solution = Solution.model_validate_json(path.read_text())
+            solution = Solution.model_validate_json(p.read_text())
         except Exception as e:
             return f"ERROR: Failed to parse solution file: {e}"
 
     if isinstance(workload, str):
-        path = Path(workload)
-        if not path.exists():
+        p = Path(workload)
+        if not p.exists():
             return f"ERROR: Workload file not found: {workload}"
         try:
-            workload = Workload.model_validate_json(path.read_text())
+            workload = Workload.model_validate_json(p.read_text())
         except Exception as e:
             return f"ERROR: Failed to parse workload file: {e}"
 
@@ -136,71 +152,38 @@ def flashinfer_bench_run_sanitizer(
     if solution.definition not in trace_set.definitions:
         return (
             f"ERROR: Definition '{solution.definition}' not found in trace database. "
-            f"Available definitions: {list(trace_set.definitions.keys())}"
+            f"Available: {list(trace_set.definitions.keys())}"
         )
     definition = trace_set.definitions[solution.definition]
 
-    if shutil.which(sanitizer_path) is None:
-        return (
-            f"ERROR: compute-sanitizer executable not found at '{sanitizer_path}'. "
-            "Please install NVIDIA CUDA toolkit."
-        )
-
-    with tempfile.TemporaryDirectory(prefix="fib_sanitizer_", dir=tmpdir) as build_dir:
-        build_path = Path(build_dir)
-
-        (build_path / "definition.json").write_text(definition.model_dump_json())
-        (build_path / "solution.json").write_text(solution.model_dump_json())
-        (build_path / "workload.json").write_text(workload.model_dump_json())
+    with tempfile.TemporaryDirectory(prefix="fib_sanitizer_", dir=tmpdir) as tmp:
+        data_dir = Path(tmp)
+        (data_dir / "definition.json").write_text(definition.model_dump_json())
+        (data_dir / "solution.json").write_text(solution.model_dump_json())
+        (data_dir / "workload.json").write_text(workload.model_dump_json())
 
         env = os.environ.copy()
         if tmpdir:
             env["TMPDIR"] = tmpdir
 
-        output = ""
-
-        for sanitizer_type in sanitizer_types:
-            output += f"\n{'=' * 60}\n"
-            output += f"Running {sanitizer_type.upper()}\n"
-            output += f"{'=' * 60}\n\n"
-
-            cmd = _build_sanitizer_command(
-                sanitizer_type,
-                build_path,
+        out = ""
+        for st in sanitizer_types:
+            out += f"\n{'=' * 60}\n{st.upper()}\n{'=' * 60}\n\n"
+            if st in _UNSUPPORTED_ON_ROCM:
+                out += (
+                    f"{st} is not supported on ROCm: NVIDIA compute-sanitizer's {st} has no AMD "
+                    "equivalent. Skipped. (memcheck is available as a best-effort fault detector.)\n"
+                )
+                continue
+            out += _run_memcheck(
+                data_dir,
                 device,
                 Path(trace_set_path) if trace_set_path else None,
-                sanitizer_path,
+                timeout,
+                env,
             )
 
-            logger.info("FlashInfer Bench Run Sanitizer: Running Command: %s", " ".join(cmd))
-
-            try:
-                result = subprocess.run(
-                    cmd, capture_output=True, text=True, env=env, timeout=timeout
-                )
-
-                output += f"STDOUT:\n{result.stdout}\n\n"
-
-                if result.stderr:
-                    output += f"STDERR:\n{result.stderr}\n\n"
-
-                output += f"Return code: {result.returncode}\n"
-
-                if result.returncode != 0:
-                    output += f"\nWARNING: {sanitizer_type} detected issues!\n"
-                else:
-                    output += f"\n{sanitizer_type} passed successfully.\n"
-
-            except subprocess.TimeoutExpired:
-                output += f"ERROR: {sanitizer_type} timed out after {timeout} seconds.\n"
-            except Exception as e:
-                output += f"ERROR: Failed to run {sanitizer_type}: {e}\n"
-
-        output += f"\n{'=' * 60}\n"
-        output += "Sanitizer checks complete\n"
-        output += f"{'=' * 60}\n"
-
+        out += f"\n{'=' * 60}\nSanitizer checks complete\n{'=' * 60}\n"
         if max_lines:
-            output = _truncate_output(output, max_lines)
-
-        return output
+            out = _truncate_output(out, max_lines)
+        return out

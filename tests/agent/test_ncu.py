@@ -1,11 +1,26 @@
-"""Integration tests for NCU profiling agent API."""
+"""Integration tests for NCU profiling agent API.
+
+NVIDIA Nsight Compute has no ROCm equivalent (rocprofv3 is used instead — see
+tests/agent/test_rocprof.py), so this whole module is skipped on ROCm/HIP builds of torch.
+"""
 
 import pytest
 
-from flashinfer_bench.agents.ncu import flashinfer_bench_run_ncu
-from flashinfer_bench.data import Solution, TraceSet
-from flashinfer_bench.data.workload import Workload
-from flashinfer_bench.env import get_fib_dataset_path
+try:
+    import torch
+
+    _IS_ROCM = getattr(torch.version, "hip", None) is not None
+except Exception:  # pragma: no cover - torch always present in CI
+    _IS_ROCM = False
+
+pytestmark = pytest.mark.skipif(
+    _IS_ROCM, reason="NCU is NVIDIA-only; on ROCm use the rocprofv3 tool (test_rocprof.py)."
+)
+
+from flashinfer_bench.agents.ncu import flashinfer_bench_run_ncu  # noqa: E402
+from flashinfer_bench.data import Solution, TraceSet  # noqa: E402
+from flashinfer_bench.data.workload import Workload  # noqa: E402
+from flashinfer_bench.env import get_fib_dataset_path  # noqa: E402
 
 TRACE_SET_PATH = str(get_fib_dataset_path())
 DEFN_NAME = "gemm_n128_k2048"
