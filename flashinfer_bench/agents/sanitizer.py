@@ -67,6 +67,8 @@ def _run_memcheck(data_dir: Path, device: str, trace_set_path: Optional[Path], t
         r = subprocess.run(cmd, capture_output=True, text=True, env=run_env, timeout=timeout)
     except subprocess.TimeoutExpired:
         return f"ERROR: memcheck run timed out after {timeout} seconds."
+    except Exception as e:  # e.g. the runner failed to launch (exec/permission)
+        return f"ERROR: memcheck failed to launch the solution runner: {e}"
 
     combined = f"STDOUT:\n{r.stdout}\n\nSTDERR:\n{r.stderr}\nReturn code: {r.returncode}\n"
     faults = [s for s in _MEM_FAULT_SIGNATURES if s.lower() in (r.stdout + r.stderr).lower()]
@@ -175,13 +177,18 @@ def flashinfer_bench_run_sanitizer(
                     "equivalent. Skipped. (memcheck is available as a best-effort fault detector.)\n"
                 )
                 continue
-            out += _run_memcheck(
+            result = _run_memcheck(
                 data_dir,
                 device,
                 Path(trace_set_path) if trace_set_path else None,
                 timeout,
                 env,
             )
+            # Preserve the agent-tool contract: an error must be returned as a string that
+            # *starts* with "ERROR:", so short-circuit instead of burying it in section output.
+            if result.startswith("ERROR:"):
+                return result
+            out += result
 
         out += f"\n{'=' * 60}\nSanitizer checks complete\n{'=' * 60}\n"
         if max_lines is not None:
