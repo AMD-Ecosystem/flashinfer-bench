@@ -1,72 +1,95 @@
-<div align="center" id="top">
+# FlashInfer-Bench on ROCm
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/logo/fib-white-bg.png">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/logo/fib-black-bg.png">
-  <img src="docs/logo/fib-white-bg.png" alt="FlashInfer-Bench logo" width="400">
-</picture>
+> ROCm-only fork of FlashInfer-Bench for AMD Instinct (CDNA3/gfx942, CDNA4/gfx950). Build →
+> benchmark → apply GPU-kernel solutions on AMD, with AITER as a first-class kernel source.
 
+## Quickstart: run a benchmark
 
-[![Documentation](https://img.shields.io/badge/docs-latest-green)](https://bench.flashinfer.ai/docs/)
-[![License](https://img.shields.io/badge/license-apache_2-blue)](https://github.com/flashinfer-ai/flashinfer-bench/blob/main/LICENCE)
-[![PyPI](https://img.shields.io/pypi/v/flashinfer-bench)](https://pypi.org/project/flashinfer-bench/)
+The shortest path to benchmarking on AMD Instinct (CDNA3/gfx942). It chains three skills —
+[`rocm-setup`](.claude/skills/rocm-setup/SKILL.md) → [`generate-aiter-solution`](.claude/skills/generate-aiter-solution/SKILL.md)
+→ [`rocm-benchmark`](.claude/skills/rocm-benchmark/SKILL.md) — with [`rocm-debug`](.claude/skills/rocm-debug/SKILL.md)
+as the fallback when something breaks. Full detail lives in those skills; this is the happy path.
 
-**Building the Virtuous Cycle for AI-driven LLM Systems**
+**Prerequisites:** an AMD Instinct GPU visible (`rocminfo` / `rocm-smi` work) and Docker with
+`/dev/kfd` + `/dev/dri`.
 
-[Get Started](#get-started) | [Documentation](https://bench.flashinfer.ai/docs/) | [Blogpost](https://flashinfer.ai/2025/10/21/flashinfer-bench.html)
-| [Slack (#flashinfer-bench)](https://join.slack.com/t/flashinfer/shared_invite/zt-379wct3hc-D5jR~1ZKQcU00WHsXhgvtA) </div>
-
-**FlashInfer-Bench** is a benchmark suite and production workflow designed to build a virtuous cycle of self-improving AI systems.
-
-It is part of a broader initiative to build the *virtuous cycle of AI improving AI systems* — enabling AI agents and engineers to collaboratively optimize the very kernels that power large language models.
-
-## Installation
-
-Install FlashInfer-Bench with pip:
+## 1. Set up and verify the environment  (`rocm-setup`)
 
 ```bash
-pip install flashinfer-bench
+# Build + enter the ROCm dev container (ROCm 7.2 + torch-ROCm + amd-flashinfer + AITER + tvm-ffi).
+# Bind-mounts the repo and installs it editable --no-deps; passes GPU device flags.
+bash docker/rocm/run.sh
+
+# Inside the container, prove the stack works end-to-end on the GPU:
+python docker/rocm/validate_p0.py          # expect 8/8 PASS on gfx942
+python -c "import torch; assert torch.version.hip; \
+  p=torch.cuda.get_device_properties(0); print(p.name, p.gcnArchName)"
 ```
 
-Import FlashInfer-Bench:
+If `validate_p0.py` isn't green, stop and fix the env before benchmarking (see `rocm-setup`).
+
+## 2. Get a solution to benchmark  (`generate-aiter-solution`)
+
+AITER is AMD's tuned op library — for covered op-types it gives you a fast solution with no compile:
+
+```bash
+# End-to-end proof across every AITER-covered op-type (build → time → correctness → speedup):
+python docker/rocm/validate_aiter_ops.py
+```
+
+Or generate an AITER solution for a specific dataset definition in Python:
 
 ```python
-import flashinfer_bench as fib
+import json
+from pathlib import Path
+from flashinfer_bench.data import Definition
+from flashinfer_bench.integration.aiter import generate_aiter_solution, is_aiter_available
 
-print(fib.__version__)
+assert is_aiter_available()
+d = Definition(**json.loads(Path("<trace_dir>/definitions/rmsnorm/rmsnorm_h4096.json").read_text()))
+sol = generate_aiter_solution(d)   # None => op/shape not covered; use a Triton/HIP solution instead
 ```
 
-## Get Started
+(You benchmark against definitions + workloads from the arch-agnostic HuggingFace trace dataset —
+this fork *consumes* that dataset; it isn't produced here.)
 
-This [guide](https://bench.flashinfer.ai/docs/start/quickstart) shows you how to use FlashInfer-Bench python module with the FlashInfer-Trace dataset.
-
-## FlashInfer Trace Dataset
-
-We provide an official dataset called **FlashInfer-Trace** with kernels and workloads in real-world AI system deployment environments. FlashInfer-Bench can use this dataset to measure and compare the performance of kernels. It follows the [FlashInfer Trace Schema](https://bench.flashinfer.ai/docs/flashinfer-trace).
-
-The official dataset is on HuggingFace: https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace
-
-Clone it with Git LFS pointer files only (large tensor files are downloaded on demand during benchmarking):
+## 3. Run the benchmark  (`rocm-benchmark`)
 
 ```bash
-GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace
-flashinfer-bench run --local flashinfer-trace
+# torch/HIP-event timing (default), under gpu-lock so the device is pinned:
+tools/gpu-lock --gpus 1 -- \
+  python -m flashinfer_bench run --local <trace_dir> --definitions <def> --save-results
 ```
 
-## Collaborators
+The loop builds each solution, times it (median over iters, cold-L2 flush), checks correctness vs
+the reference, and reports speedup. **A speedup only counts if correctness passes** — on AMD, a
+correctness failure is often an fp8 `_fnuz` dtype mismatch or a tolerance issue, not the kernel.
+For a high-fidelity pass use the `rocprofv3` backend and pin clocks:
 
-Our collaborators include:
+```bash
+sudo rocm-smi --setperfdeterminism 1900
+FIB_TIMING_BACKEND=rocprof FIB_L2_FLUSH_MB=256 \
+  tools/gpu-lock --gpus 1 -- python -m flashinfer_bench run --local <trace_dir> --definitions <def>
+sudo rocm-smi --resetclocks
+```
 
-<div align="center">
+Always record `gcnArchName` + `torch.version.hip` with any number — results aren't comparable across
+arch/ROCm versions.
 
-[<img src="https://raw.githubusercontent.com/mlc-ai/XGrammar-web-assets/refs/heads/main/repo/nvidia.svg" height=50/>](https://github.com/NVIDIA/TensorRT-LLM)
-&emsp;
-[<img src="https://raw.githubusercontent.com/mlc-ai/XGrammar-web-assets/refs/heads/main/repo/gpu_mode.png" height=50/>](https://github.com/gpu-mode)
-&emsp;
-[<img src="https://raw.githubusercontent.com/mlc-ai/XGrammar-web-assets/refs/heads/main/repo/sglang.png" height=50/>](https://github.com/sgl-project/sglang)
-&emsp;
-[<img src="https://raw.githubusercontent.com/mlc-ai/XGrammar-web-assets/refs/heads/main/repo/vllm.png" height=50/>](https://github.com/vllm-project/vllm)
-&emsp;
-[<img src="https://raw.githubusercontent.com/mlc-ai/XGrammar-web-assets/refs/heads/main/repo/bosch.svg" height=50/>](https://www.bosch.com/)
+## When something breaks  (`rocm-debug`)
 
-</div>
+```bash
+AMD_SERIALIZE_KERNEL=3 HIP_LAUNCH_BLOCKING=1 \
+  python -m flashinfer_bench run --local <trace_dir> --definitions <def>
+```
+
+This localizes HIP faults to the offending kernel. See [`rocm-debug`](.claude/skills/rocm-debug/SKILL.md)
+for the per-error recipe table (memory faults, NaN/Inf, HIP OOM, AITER errors, fp8 `_fnuz`).
+
+## Going further
+
+- **Hand-written HIP kernels** (when AITER/Triton don't cover an op): [`add-rocm-kernel`](.claude/skills/add-rocm-kernel/SKILL.md).
+- **Contributing changes back**: [`pr-workflow`](.claude/skills/pr-workflow/SKILL.md) (targets
+  `AMD-Ecosystem/flashinfer-bench`, base `amd-integration`).
+- **Full porting context**: [`ROCM_PORT_PLAN.md`](ROCM_PORT_PLAN.md).
+- **Repo-level guidance for agents**: [`CLAUDE.md`](CLAUDE.md).

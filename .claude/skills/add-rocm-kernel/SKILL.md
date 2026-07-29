@@ -1,5 +1,5 @@
 ---
-name: author-hip-solution
+name: add-rocm-kernel
 description: Write hand-authored C++/HIP bench Solutions that build on ROCm via the torch and tvm-ffi builders. Full CUDA→ROCm porting cheat sheet (at::Tensor, HIP stream/guard masquerade, TORCH_LIBRARY vs PYBIND11, dispatch/validation macros), gpu_iface divergence pattern, -ffast-math/finite-math gotcha, arch targeting, wavefront=64, FP8 _fnuz, and CDNA3-vs-CDNA4 differences. Use when AITER and Triton don't cover an op and you need a native kernel solution on gfx942/gfx950.
 ---
 
@@ -35,7 +35,7 @@ additive, not a rewrite:
 - raw hipcc: `--offload-arch=gfx942`
 
 Don't hand-add `--offload-arch` when a JIT generator already injects it per target arch. See
-[`benchmark-on-rocm`](../benchmark-on-rocm/SKILL.md) for arch detection.
+[`rocm-benchmark`](../rocm-benchmark/SKILL.md) for arch detection.
 
 ## CUDA → ROCm cheat sheet
 
@@ -95,9 +95,9 @@ and dispatch macros (`DISPATCH_PYTORCH_DTYPE_TO_CTYPE_FP16` = FP16+BF16;
 1. Write the `Solution` with `language: cuda` + chosen `binding`; `.cu` source. Model the entry point
    on existing target solutions and `agents/ffi_prompt.py`.
 2. Build+run through the normal loop on the GPU (build → time → correctness vs reference → speedup);
-   see [`benchmark-on-rocm`](../benchmark-on-rocm/SKILL.md).
+   see [`rocm-benchmark`](../rocm-benchmark/SKILL.md).
 3. On build failure, check arch flags + the cheat-sheet substitutions first; then
-   [`debug-rocm`](../debug-rocm/SKILL.md).
+   [`rocm-debug`](../rocm-debug/SKILL.md).
 4. Clear the stale JIT cache after any toolchain/flag change: `rm -rf ~/.cache/flashinfer/`.
 
 Before committing: no `<torch/...>` in device headers; launcher uses `at::hip::getCurrentHIPStream()`
@@ -113,5 +113,5 @@ decision (§3.7) lands, or when `agents/ffi_prompt.py` gains HIP-specific guidan
 
 - [ROCM_PORT_PLAN.md](../../../ROCM_PORT_PLAN.md) §3.2, §3.3, §3.7, §3.11
 - [generate-aiter-solution](../generate-aiter-solution/SKILL.md) — try AITER first
-- [benchmark-on-rocm](../benchmark-on-rocm/SKILL.md) — build/time the solution
-- [debug-rocm](../debug-rocm/SKILL.md) — runtime fault triage, debug builds
+- [rocm-benchmark](../rocm-benchmark/SKILL.md) — build/time the solution
+- [rocm-debug](../rocm-debug/SKILL.md) — runtime fault triage, debug builds

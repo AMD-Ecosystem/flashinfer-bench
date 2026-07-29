@@ -1,5 +1,5 @@
 ---
-name: debug-rocm
+name: rocm-debug
 description: Debug HIP kernel crashes, memory-access faults, NaN/Inf, HIP OOM, FP8 dtype mismatches, and AITER errors on AMD CDNA (gfx942/gfx950). Covers the AMD_SERIALIZE_KERNEL + HIP_LAUNCH_BLOCKING combo, a per-error recipe table, the rocgdb / AMD_LOG_LEVEL / HSA / dmesg tooling set, AMD gotchas (ROCm masquerade, wavefront=64, fnuz FP8, stripped installs), and why compute-sanitizer has no ROCm analog. Use when a build or benchmark run crashes or produces wrong numbers on ROCm.
 ---
 
@@ -34,7 +34,7 @@ what's being passed, print `t.shape, t.dtype, t.device, t.is_contiguous()` and c
 | `backend="aiter"` `RuntimeError` | non-gfx942/gfx950 GPU. |
 | `backend="aiter"` `ImportError` | `amd-aiter` not installed → `pip install amd-aiter --index-url https://pypi.amd.com/simple/` (or the version pinned by `docker/rocm/`). AITER also calls `git` at import — ensure git present + `git config --global --add safe.directory '*'`. |
 | `backend="aiter"` hard GPU fault mid-kernel | `amd-aiter` version mismatch vs ROCm. Reinstall matching your ROCm version; run the default HIP backend to confirm the bug is in AITER, not the caller. |
-| Build fails citing `nvcc` / `libcuda` | a CUDA-only flag leaked into a builder — drop unconditional `-lcuda -lcublas`, let hipcc/tvm-ffi choose HIP libs. See [`author-hip-solution`](../author-hip-solution/SKILL.md). |
+| Build fails citing `nvcc` / `libcuda` | a CUDA-only flag leaked into a builder — drop unconditional `-lcuda -lcublas`, let hipcc/tvm-ffi choose HIP libs. See [`add-rocm-kernel`](../add-rocm-kernel/SKILL.md). |
 | Stale build after an env/flag change | JIT `build.ninja` is only (re)written when missing — env changes are silent no-ops. Clear the cache: `rm -rf ~/.cache/flashinfer/`. |
 
 ## ROCm tooling
@@ -95,7 +95,7 @@ ROCm coverage (§3.10), or when JIT/cache debug behavior changes.
 ## See Also
 
 - [rocm-setup](../rocm-setup/SKILL.md) — validate the environment first (`validate_p0.py`)
-- [benchmark-on-rocm](../benchmark-on-rocm/SKILL.md) — tolerances, AITER fallback conditions
-- [author-hip-solution](../author-hip-solution/SKILL.md) — build-side faults, debug builds
+- [rocm-benchmark](../rocm-benchmark/SKILL.md) — tolerances, AITER fallback conditions
+- [add-rocm-kernel](../add-rocm-kernel/SKILL.md) — build-side faults, debug builds
 - [generate-aiter-solution](../generate-aiter-solution/SKILL.md) — AITER coverage/fallthrough
 - [ROCM_PORT_PLAN.md](../../../ROCM_PORT_PLAN.md) §3.10 — profiling/debug agents
