@@ -1,4 +1,9 @@
-# Quickstart: run a benchmark on ROCm
+# FlashInfer-Bench on ROCm
+
+> ROCm-only fork of FlashInfer-Bench for AMD Instinct (CDNA3/gfx942, CDNA4/gfx950). Build →
+> benchmark → apply GPU-kernel solutions on AMD, with AITER as a first-class kernel source.
+
+## Quickstart: run a benchmark
 
 The shortest path to benchmarking on AMD Instinct (CDNA3/gfx942). It chains three skills —
 [`rocm-setup`](.claude/skills/rocm-setup/SKILL.md) → [`generate-aiter-solution`](.claude/skills/generate-aiter-solution/SKILL.md)

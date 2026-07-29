@@ -273,6 +273,13 @@ Keep this file focused on repo-level context — update it when the ROCm setup, 
 structure, or core concepts change, and update `.claude/skills/*.md` when a skill's procedure
 changes. Skill-specific and op_type-specific detail belongs in the skills, not here.
 
+## Model Usage Policy
+
+- **Plan mode / architecture / multi-file analysis** → `opus` at high effort.
+- **Agentic tasks** (multi-step autonomous bash/edits) → `opus` at high effort.
+- **Routine implementation / test writing / refactoring** (after a plan is approved) → `sonnet`.
+- **Quick tasks** (Q&A, lookups, docs) → `sonnet`.
+
 ## References
 
 - [FlashInfer Documentation](https://docs.flashinfer.ai)
