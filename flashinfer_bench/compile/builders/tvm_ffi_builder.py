@@ -56,8 +56,9 @@ class TVMFFIBuilder(Builder):
         """Initialize the TVMFFIBuilder."""
         super().__init__(self._PACKAGE_PREFIX, self._BUILD_DIR_NAME)
 
-    # BLAS dependency names a solution may declare (CUDA names accepted and mapped to ROCm).
-    _BLAS_DEPS: ClassVar[List[str]] = ["cublas", "hipblas", "hipblaslt", "rocblas"]
+    # BLAS dependency names a solution may declare (the CUDA name `cublas` is accepted and mapped).
+    # Only hipBLAS/rocBLAS are linked below; hipBLASLt (a separate lib/header) is not wired yet.
+    _BLAS_DEPS: ClassVar[List[str]] = ["cublas", "hipblas", "rocblas"]
 
     @staticmethod
     def _find_rocm_lib_path() -> Optional[str]:

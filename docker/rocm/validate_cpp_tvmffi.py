@@ -96,9 +96,8 @@ def main() -> int:
         )
 
         trace_set = TraceSet.from_path(str(root))
-        result = Benchmark(trace_set, BenchmarkConfig(warmup_runs=3, iterations=10, num_trials=1)).run_all(
-            dump_traces=False
-        )
+        config = BenchmarkConfig(warmup_runs=3, iterations=10, num_trials=1)
+        result = Benchmark(trace_set, config).run_all(dump_traces=False)
 
         print("=" * 72)
         print("C++/CUDA (tvm-ffi) solution end-to-end on ROCm")
