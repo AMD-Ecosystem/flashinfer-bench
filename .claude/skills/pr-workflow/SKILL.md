@@ -188,6 +188,12 @@ Done = no unresolved threads remain, each carrying either a fix+SHA reply or a w
 
 ## PR Description
 
+**Do not hard-wrap the body to a fixed column.** GitHub renders a single newline inside a paragraph
+as a `<br>`, so column-wrapped prose shows up as broken mid-sentence lines. Write each paragraph and
+each bullet as **one line** and let the browser soft-wrap; use blank lines only to separate
+paragraphs/list items. (Same for issue bodies and PR/issue comments — anything GitHub renders.) This
+is the opposite of the repo's `.md`/`.py` source files, which are wrapped normally.
+
 **Body** — include sections that apply, skip the rest:
 
 - `## Summary` — 1–3 sentences on what and why.
