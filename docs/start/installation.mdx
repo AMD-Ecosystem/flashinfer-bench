@@ -44,8 +44,9 @@ bash docker/rocm/run.sh python docker/rocm/validate_p0.py
 See `docker/rocm/README.md` for details. To install into an existing ROCm environment instead:
 
 ```bash
-# 1) ROCm build of torch (match your ROCm version)
-pip install torch --index-url https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2/
+# 1) ROCm build of torch (match your ROCm version). The Radeon URL is a find-links page
+#    (not a PEP 503 index), so use -f to keep PyPI available for torch's pure-python deps.
+pip install torch -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2/
 # 2) flashinfer-bench + ROCm extras (amd-flashinfer imports as `flashinfer`; amd_aiter for AITER)
 pip install "flashinfer-bench[rocm]" \
     --extra-index-url https://pypi.amd.com/rocm-7.2.0/simple/ \
