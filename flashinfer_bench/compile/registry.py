@@ -181,7 +181,7 @@ class BuilderRegistry:
             author="__builtin__",
             spec=BuildSpec(
                 language=SupportedLanguages.PYTHON,
-                target_hardware=["cuda"],
+                target_hardware=["rocm"],
                 entry_point="main.py::run",
                 destination_passing_style=False,
             ),
