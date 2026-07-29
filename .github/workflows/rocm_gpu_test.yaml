@@ -1,0 +1,46 @@
+name: ROCm GPU tests
+
+# Runs the ROCm / AMD-CDNA test suite inside the docker/rocm dev image on a self-hosted AMD GPU
+# runner (CDNA3 gfx942 / MI300X / MI325X).
+#
+# Requirements to enable:
+#   - A self-hosted runner labeled [self-hosted, rocm] with docker, /dev/kfd + /dev/dri, and the
+#     user in the video/render groups.
+#   - Network access to repo.radeon.com and pypi.amd.com (for the image build).
+#
+# Manual trigger by default (self-hosted GPU runners are a shared, scarce resource). Uncomment the
+# pull_request trigger once a runner is wired up.
+on:
+  workflow_dispatch:
+  # pull_request:
+  #   paths:
+  #     - "flashinfer_bench/**"
+  #     - "tests/**"
+  #     - "docker/rocm/**"
+  #     - "pyproject.toml"
+
+jobs:
+  rocm-gpu-test:
+    name: ROCm GPU tests (gfx942)
+    runs-on: [self-hosted, rocm]
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build ROCm dev image
+        run: DOCKER_BUILDKIT=0 docker build -f docker/rocm/Dockerfile -t flashinfer-bench:rocm-ci docker/rocm
+
+      - name: P0 stack validation + test suite
+        run: |
+          docker run --rm \
+            --device=/dev/kfd --device=/dev/dri \
+            --group-add video --group-add render \
+            --security-opt seccomp=unconfined --ipc=host \
+            -v "${{ github.workspace }}:/workspace" -w /workspace \
+            flashinfer-bench:rocm-ci bash -lc '
+              set -e
+              python3 -m pip install -e /workspace --no-deps -q
+              python3 docker/rocm/validate_p0.py
+              python3 -m pytest tests/compile tests/agent tests/integration/test_aiter_generator.py -q
+            '

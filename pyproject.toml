@@ -24,10 +24,14 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+  # torch must be the ROCm build on AMD GPUs; install it first from
+  # https://repo.radeon.com/rocm/manylinux/rocm-rel-<ver>/ (see docs/start/installation).
   "torch>=2.8.0",
   "pydantic>=2.0.0",
   "safetensors>=0.5.0",
-  "flashinfer-python>=0.6.4",
+  # NOTE: the ROCm FlashInfer package (`amd-flashinfer`, imported as `flashinfer`) is only needed
+  # for the flashinfer integration/apply path and lives on AMD's package index, so it is an
+  # optional dependency under the `rocm` extra rather than a hard requirement.
   "apache-tvm-ffi>=0.1.2",
   "docstring-parser>=0.16",
   "pyyaml>=6.0",
@@ -55,7 +59,13 @@ dev = [
   "setuptools",
 ]
 serve = ["fastapi>=0.100.0", "uvicorn[standard]>=0.20.0"]
-cuda12 = ["nvidia-cublas-cu12>=12.3", "nvidia-cudnn-cu12>=9.0"]
+# ROCm / AMD GPU runtime. These wheels live on AMD's package index (not PyPI), so install with the
+# matching extra-index-urls, e.g.:
+#   pip install "flashinfer-bench[rocm]" \
+#     --extra-index-url https://pypi.amd.com/rocm-7.2.0/simple/ \
+#     --extra-index-url https://pypi.amd.com/rocm-7.1.1/simple/
+# (amd-flashinfer imports as `flashinfer`; amd_aiter powers the AITER-backed solutions.)
+rocm = ["amd-flashinfer", "amd_aiter"]
 
 [project.scripts]
 flashinfer-bench = "flashinfer_bench.cli.main:cli"
@@ -66,7 +76,6 @@ include = ["flashinfer_bench*"]
 
 [tool.setuptools.package-data]
 "flashinfer_bench" = ["py.typed"]
-"flashinfer_bench._deps.cutlass" = ["include/**"]
 
 [tool.black]
 line-length = 100
