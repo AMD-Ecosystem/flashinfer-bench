@@ -50,9 +50,10 @@ def _silu_mul_def(name="silu_mul_h4096", dtype="float16"):
     return Definition(
         name=name,
         op_type="silu_and_mul",
-        axes={"M": AxisVar(), "H2": AxisConst(value=8192)},
+        axes={"M": AxisVar(), "H2": AxisConst(value=8192), "H": AxisConst(value=4096)},
+        constraints=["H2 == 2 * H"],
         inputs={"x": TensorSpec(shape=["M", "H2"], dtype=dtype)},
-        outputs={"out": TensorSpec(shape=["M", "H2"], dtype=dtype)},
+        outputs={"out": TensorSpec(shape=["M", "H"], dtype=dtype)},
         reference=_RMSNORM_REF,
     )
 

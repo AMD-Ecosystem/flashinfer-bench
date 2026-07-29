@@ -6,7 +6,8 @@ The timing backend is selectable via the ``FIB_TIMING_BACKEND`` environment vari
 - ``torch_events`` (default): portable GPU timing using ``torch.cuda.Event`` (backed by HIP events
   on ROCm / CUDA events on NVIDIA). Self-contained, no dependency on ``flashinfer.testing``.
 - ``rocprof`` (reserved): device-side kernel timing via the ``rocprofv3`` CLI (CUPTI-parity). Not
-  yet implemented; see ROCM_PORT_PLAN.md §3.1.
+  yet implemented — selecting it warns and falls back to ``torch_events``. See the ``rocm-benchmark``
+  skill (``.claude/skills/rocm-benchmark/SKILL.md``).
 
 Historically this module used ``flashinfer.testing.bench_gpu_time_with_cupti``. That path depends on
 CUPTI (NVIDIA-only) and, on the ROCm ``flashinfer`` build, exposes an incompatible signature, so it
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import os
 import statistics
+import warnings
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
 from typing import Any, List
@@ -153,9 +155,19 @@ def time_runnable(fn: Runnable, args: List[Any], warmup: int, iters: int, device
         The median execution time in milliseconds.
     """
     backend = os.environ.get("FIB_TIMING_BACKEND", "torch_events").lower()
+    if backend == "rocprof":
+        # Reserved rocprofv3-CLI backend, not implemented yet: warn and fall back to the portable
+        # torch-event timing rather than failing on a documented backend name.
+        warnings.warn(
+            "FIB_TIMING_BACKEND='rocprof' is not implemented yet; falling back to 'torch_events'.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        backend = "torch_events"
     if backend not in ("torch_events", ""):
-        # rocprof and other backends are reserved for future work (ROCM_PORT_PLAN.md §3.1).
-        raise ValueError(f"Unsupported FIB_TIMING_BACKEND='{backend}'. Supported: 'torch_events'.")
+        raise ValueError(
+            f"Unsupported FIB_TIMING_BACKEND='{backend}'. Supported: 'torch_events', 'rocprof'."
+        )
 
     lock = _device_lock(device)
     with lock:

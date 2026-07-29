@@ -11,6 +11,7 @@ and is verified/benchmarked against the definition's reference like any other.
 
 from __future__ import annotations
 
+import keyword
 import logging
 from typing import Callable, Dict, List, Optional
 
@@ -57,8 +58,17 @@ def _make_solution(
 
 
 def _input_names(definition: Definition) -> List[str]:
-    """Ordered input argument names (dict preserves definition order)."""
-    return list(definition.inputs.keys())
+    """Ordered input argument names (dict preserves definition order).
+
+    These names are emitted verbatim as parameters of the generated ``def run(...)``, so they must be
+    valid, non-keyword Python identifiers. If any isn't, raise so the caller treats the definition as
+    unsupported (returns None) rather than emitting a solution that won't import.
+    """
+    names = list(definition.inputs.keys())
+    invalid = [n for n in names if not n.isidentifier() or keyword.iskeyword(n)]
+    if invalid:
+        raise ValueError(f"input names are not valid Python identifiers: {invalid}")
+    return names
 
 
 def _all_float16ish(definition: Definition) -> bool:
@@ -213,7 +223,7 @@ def augment_trace_set_with_aiter(
     For every definition in the trace set whose op-type AITER covers, generate the AITER-backed
     solution and append it to ``trace_set.solutions`` (keyed by definition name). This is the
     entry point for using AITER as a first-class candidate source in the benchmark and ``apply``
-    flows (ROCM_PORT_PLAN.md §3.9 step 3).
+    flows. See the generate-aiter-solution skill (.claude/skills/generate-aiter-solution/SKILL.md).
 
     Parameters
     ----------

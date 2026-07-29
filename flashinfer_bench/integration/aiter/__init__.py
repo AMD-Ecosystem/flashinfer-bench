@@ -5,7 +5,7 @@ AITER is used here as a *first-class kernel source*: for op-types AITER covers, 
 ``Solution`` is generated whose entry point calls the tuned AITER op. Such solutions build with the
 PythonBuilder (no compilation) and are benchmarked/verified like any other.
 
-See ROCM_PORT_PLAN.md §3.9.
+See the generate-aiter-solution skill (.claude/skills/generate-aiter-solution/SKILL.md).
 """
 
 from __future__ import annotations
