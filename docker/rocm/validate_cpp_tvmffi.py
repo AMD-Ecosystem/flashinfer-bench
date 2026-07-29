@@ -92,7 +92,7 @@ def main() -> int:
         wl = Workload(axes={"N": 1 << 20}, inputs={"x": RandomInput()}, uuid="add_one_wl")
         save_jsonl_file(
             [Trace(definition="add_one_n", workload=wl)],
-            root / "workloads" / "op" / "add_one_n.jsonl",
+            root / "workloads" / "elementwise" / "add_one_n.jsonl",
         )
 
         trace_set = TraceSet.from_path(str(root))

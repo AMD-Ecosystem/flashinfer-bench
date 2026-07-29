@@ -98,7 +98,7 @@ class TVMFFIBuilder(Builder):
         return None
 
     def _needs_blas(self, solution: Solution) -> bool:
-        """True if the solution declares a BLAS dependency (cublas/hipblas/rocblas/hipblaslt)."""
+        """True if the solution declares a BLAS dependency (cublas/hipblas/rocblas)."""
         deps = [d.lower() for d in (solution.spec.dependencies or [])]
         return any(d in self._BLAS_DEPS for d in deps)
 
