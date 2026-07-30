@@ -34,7 +34,6 @@ _MEM_FAULT_SIGNATURES = (
     "page fault",
     "hipErrorIllegalAddress",
     "an illegal memory access",
-    "invalid device ordinal",
 )
 
 
@@ -74,9 +73,17 @@ def _run_memcheck(
 
     combined = f"STDOUT:\n{r.stdout}\n\nSTDERR:\n{r.stderr}\nReturn code: {r.returncode}\n"
     faults = [s for s in _MEM_FAULT_SIGNATURES if s.lower() in (r.stdout + r.stderr).lower()]
-    if faults or r.returncode != 0:
-        detail = f"detected fault signatures: {faults}" if faults else "non-zero exit"
-        return combined + f"\nMEMCHECK: FAIL — {detail}\n"
+    if faults:
+        return combined + f"\nMEMCHECK: FAIL — detected fault signatures: {faults}\n"
+    if r.returncode != 0:
+        # A non-zero exit with no fault signature is a build error, a bad device string, or a
+        # Python exception in the runner — a tool failure, not a memcheck verdict. Reporting it
+        # as "MEMCHECK: FAIL" would send an agent hunting for a memory bug that isn't there.
+        return (
+            f"ERROR: the solution runner exited with code {r.returncode} without any GPU "
+            f"memory-fault signature, so this is a run failure rather than a memcheck result.\n"
+            + combined
+        )
     return combined + (
         "\nMEMCHECK: no GPU memory fault detected.\n"
         "NOTE: ROCm has no full compute-sanitizer equivalent; this only catches faults that abort "

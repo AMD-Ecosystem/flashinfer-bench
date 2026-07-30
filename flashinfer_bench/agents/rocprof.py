@@ -113,7 +113,10 @@ def _region_window(out_dir: Path) -> Optional[tuple]:
             try:
                 return int(r["Start_Timestamp"]), int(r["End_Timestamp"])
             except (KeyError, TypeError, ValueError):
-                return None
+                # Multi-process runs emit several marker CSVs (all merged by _read_csv), so a
+                # malformed row is not the last word — keep scanning for a usable one rather
+                # than silently giving up on region scoping.
+                continue
     return None
 
 
@@ -132,6 +135,14 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
         except (KeyError, TypeError, ValueError):
             continue
         parsed.append((r, start, end))
+
+    # Rows present but none parsable means the CSV schema or the run is broken. Report that as an
+    # error rather than a "0 kernel dispatch(es)" report, which reads like a legitimate empty run.
+    if not parsed:
+        return (
+            f"ERROR: kernel-trace CSV had {len(rows)} row(s) but none carried parsable "
+            f"Start_Timestamp/End_Timestamp values; cannot build a profile."
+        )
 
     window = _region_window(out_dir)
     selected = [

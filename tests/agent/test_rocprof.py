@@ -62,3 +62,36 @@ def test_format_kernel_report_skips_unparsable_timestamps(tmp_path):
 
 def test_format_kernel_report_no_output(tmp_path):
     assert _format_kernel_report(tmp_path, max_lines=None).startswith("ERROR:")
+
+
+def test_region_window_skips_malformed_marker_rows(tmp_path):
+    """A malformed marker row must not disable region scoping when a valid one follows.
+
+    Merging every marker CSV makes multiple region rows likely on multi-process runs, so
+    bailing out on the first unparsable one would silently widen the report to all kernels.
+    """
+    (tmp_path / "marker_api_trace.csv").write_text(
+        "Name,Start_Timestamp,End_Timestamp\n"
+        "flashinfer_bench_ncu_profile,bogus,bogus\n"
+        "flashinfer_bench_ncu_profile,1000,9000\n"
+    )
+    (tmp_path / "kernel_trace.csv").write_text(
+        _KERNEL_HEADER + "in_window,2000,3000\nout_of_window,20000,30000\n"
+    )
+
+    out = _format_kernel_report(tmp_path, max_lines=None)
+
+    assert "in_window" in out
+    assert "out_of_window" not in out
+    assert "1 kernel dispatch(es)" in out
+
+
+def test_format_kernel_report_errors_when_no_row_parses(tmp_path):
+    """Rows present but none parsable is a failure, not a legitimate zero-kernel run."""
+    (tmp_path / "kernel_trace.csv").write_text(_KERNEL_HEADER + "k1,nope,nope\nk2,,\n")
+
+    out = _format_kernel_report(tmp_path, max_lines=None)
+
+    assert out.startswith("ERROR:")
+    assert "2 row(s)" in out
+    assert "0 kernel dispatch(es)" not in out

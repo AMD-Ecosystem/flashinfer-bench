@@ -107,6 +107,31 @@ def test_run_sanitizer_invalid_definition():
     assert "not found" in out
 
 
+def test_invalid_device_ordinal_is_not_a_fault_signature():
+    """A bad device index is a config error, not a GPU memory fault."""
+    from flashinfer_bench.agents.sanitizer import _MEM_FAULT_SIGNATURES
+
+    assert not any("device ordinal" in s.lower() for s in _MEM_FAULT_SIGNATURES)
+
+
+def test_run_sanitizer_reports_run_failure_as_error():
+    """A runner that exits non-zero without a fault signature is a run failure, not MEMCHECK: FAIL.
+
+    "cuda:999" cannot be selected on any machine, so the runner always exits non-zero here —
+    with an "invalid device ordinal" message on a GPU host, or a plain device error without one.
+    Either way the tool must surface an ERROR:, not a memcheck verdict that sends an agent
+    hunting for a memory bug.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        solution, workload = _make_dataset(Path(d))
+        out = flashinfer_bench_run_sanitizer(
+            solution, workload, device="cuda:999", trace_set_path=d, sanitizer_types=["memcheck"]
+        )
+
+    assert out.startswith("ERROR:")
+    assert "MEMCHECK: FAIL" not in out
+
+
 @pytest.mark.requires_torch_cuda
 def test_run_sanitizer_memcheck_runs():
     with tempfile.TemporaryDirectory() as d:
