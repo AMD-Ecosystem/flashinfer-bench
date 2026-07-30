@@ -100,15 +100,21 @@ RUN python3 -m pip install "${ROCM_PATH}/share/amd_smi" || \
 # python/tools never shadow the system interpreter used everywhere else.
 RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
         | tar -xj -C /usr/local bin/micromamba \
-    && /usr/local/bin/micromamba create -y -q -p /opt/gitenv -c conda-forge git \
-    && /usr/local/bin/micromamba clean -a -y \
+    && /usr/local/bin/micromamba create -y -q -p /opt/gitenv -c conda-forge git elfutils \
     && printf '#!/bin/sh\nexec /opt/gitenv/bin/git "$@"\n' > /usr/local/bin/git \
     && chmod +x /usr/local/bin/git \
     && git --version \
     # The repo is bind-mounted from the host (owned by the host user) but the
     # container runs as root; allow git to operate on it regardless of owner so
     # setuptools_scm's git introspection works during the editable install.
-    && git config --system --add safe.directory /workspace
+    && git config --system --add safe.directory /workspace \
+    # rocprofv3's tool library needs libdw.so.1 (elfutils), which is absent from the
+    # base image and the reachable apt mirrors. Install it from conda-forge (above)
+    # and expose ONLY libdw in the system multiarch dir (it resolves against the
+    # system libelf/libz/...), so the global env is not polluted with conda libs.
+    && cp -L /opt/gitenv/lib/libdw.so.1 /usr/lib/x86_64-linux-gnu/libdw.so.1 \
+    && ldconfig \
+    && /usr/local/bin/micromamba clean -a -y
 
 # Still pin the version so setuptools_scm produces a stable version without
 # needing repo tags in the bind-mounted source.

@@ -13,6 +13,9 @@ from typing import List, Optional, Union
 
 from flashinfer_bench.data import Solution, TraceSet, Workload
 
+from ._output import truncate
+from ._profiling import PROFILE_REGION
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,16 +90,7 @@ def _build_ncu_command(
 ) -> List[str]:
     """Build the NCU command line."""
 
-    cmd = [
-        ncu_path,
-        "--page",
-        page,
-        "--set",
-        set,
-        "--nvtx",
-        "--nvtx-include",
-        "flashinfer_bench_ncu_profile]",
-    ]
+    cmd = [ncu_path, "--page", page, "--set", set, "--nvtx", "--nvtx-include", f"{PROFILE_REGION}]"]
 
     # Add extra sections
     if sections:
@@ -126,18 +120,6 @@ def _build_ncu_command(
     cmd.extend(runner_cmd)
 
     return cmd
-
-
-def _truncate_output(output: str, max_lines: int) -> str:
-    """Truncate output to max_lines."""
-    lines = output.split("\n")
-    if len(lines) <= max_lines:
-        return output
-
-    truncated = lines[:max_lines]
-    remaining = len(lines) - max_lines
-    truncated.append(f"\n[Output truncated: {remaining} more lines, use max_lines=None to see all]")
-    return "\n".join(truncated)
 
 
 def flashinfer_bench_run_ncu(
@@ -297,8 +279,8 @@ def flashinfer_bench_run_ncu(
         if result.returncode != 0:
             return f"ERROR: NCU exited with non-zero return code {result.returncode}:\n{output}"
 
-        # Truncate if requested
-        if max_lines:
-            output = _truncate_output(output, max_lines)
+        # is not None, not truthiness: max_lines=0 is a real limit meaning "keep nothing".
+        if max_lines is not None:
+            output = truncate(output, max_lines)
 
         return output

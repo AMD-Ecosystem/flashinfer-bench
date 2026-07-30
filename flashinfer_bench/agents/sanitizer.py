@@ -1,10 +1,16 @@
-"""Compute-sanitizer tool"""
+"""Memory/correctness checking tool for LLM agents (ROCm best-effort).
+
+NVIDIA's compute-sanitizer has no full ROCm equivalent. This tool provides a best-effort
+"memcheck" by running the solution and detecting GPU memory faults reported by the HIP runtime
+(illegal address / page fault / HSA memory fault). The race/sync/init sub-tools have no ROCm
+counterpart and return a clear "unsupported" message rather than failing, so agents degrade
+gracefully. The JSON-serializable, "ERROR:"-prefixed contract matches the previous tool.
+"""
 
 from __future__ import annotations
 
 import logging
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -13,22 +19,57 @@ from typing import List, Literal, Optional, Union
 
 from flashinfer_bench.data import Solution, TraceSet, Workload
 
+from ._output import truncate
+
 logger = logging.getLogger(__name__)
 
 SanitizerType = Literal["memcheck", "racecheck", "initcheck", "synccheck"]
 VALID_SANITIZER_TYPES: set[SanitizerType] = {"memcheck", "racecheck", "initcheck", "synccheck"}
 
+# Sub-tools with no ROCm equivalent (compute-sanitizer racecheck/initcheck/synccheck).
+_UNSUPPORTED_ON_ROCM: set[SanitizerType] = {"racecheck", "initcheck", "synccheck"}
 
-def _build_sanitizer_command(
-    sanitizer_type: SanitizerType,
-    data_dir: Path,
-    device: str,
-    trace_set_path: Optional[Path],
-    sanitizer_path: str,
-) -> List[str]:
-    cmd = [sanitizer_path, "--tool", sanitizer_type]
+# HIP/HSA runtime signatures indicating a GPU memory fault.
+_MEM_FAULT_SIGNATURES = (
+    "Memory access fault",
+    "HSA_STATUS_ERROR_MEMORY_FAULT",
+    "page fault",
+    "hipErrorIllegalAddress",
+    "an illegal memory access",
+)
 
-    runner_cmd = [
+
+def _xnack_status(run_env) -> str:
+    """Describe the fault-detection actually in effect, so a clean verdict can be read correctly.
+
+    A "no fault detected" result means much less on an ``xnack-`` target, where page-fault-based
+    detection is unavailable no matter what ``HSA_XNACK`` is set to.
+    """
+    value = run_env.get("HSA_XNACK", "<unset>")
+    arch = ""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            arch = torch.cuda.get_device_properties(0).gcnArchName
+    except Exception:  # torch missing, no device, or a driver hiccup — arch is a nice-to-have
+        pass
+
+    if "xnack-" in arch:
+        return (
+            f"HSA_XNACK={value}, but the device target is {arch}: page-fault-based detection is "
+            "NOT active, so only faults that abort the process were catchable."
+        )
+    if arch:
+        return f"HSA_XNACK={value}, device target {arch}."
+    return f"HSA_XNACK={value} (device target undetermined)."
+
+
+def _run_memcheck(
+    data_dir: Path, device: str, trace_set_path: Optional[Path], timeout: int, env
+) -> str:
+    """Best-effort memcheck: run the solution and detect GPU memory faults."""
+    cmd = [
         sys.executable,
         "-u",
         "-m",
@@ -39,92 +80,106 @@ def _build_sanitizer_command(
         device,
     ]
     if trace_set_path:
-        runner_cmd.extend(["--trace-set-path", str(trace_set_path)])
+        cmd += ["--trace-set-path", str(trace_set_path)]
+    # HSA_XNACK=1 asks for page-fault-based detection of out-of-bounds device accesses (surfacing
+    # faults instead of silently reading garbage). setdefault, NOT a forced assignment: code
+    # objects on CDNA are built per xnack variant (e.g. gfx942:xnack-), so overriding an explicit
+    # caller setting can mismatch the target. The verdict reports what was actually in effect
+    # instead — see _xnack_status.
+    run_env = dict(env)
+    run_env.setdefault("HSA_XNACK", "1")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, env=run_env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return f"ERROR: memcheck run timed out after {timeout} seconds."
+    except Exception as e:  # e.g. the runner failed to launch (exec/permission)
+        return f"ERROR: memcheck failed to launch the solution runner: {e}"
 
-    cmd.extend(runner_cmd)
-    return cmd
-
-
-def _truncate_output(output: str, max_lines: int) -> str:
-    """Truncate output to max_lines."""
-    lines = output.split("\n")
-    if len(lines) <= max_lines:
-        return output
-
-    truncated = lines[:max_lines]
-    remaining = len(lines) - max_lines
-    truncated.append(f"\n[Output truncated: {remaining} more lines, use max_lines=None to see all]")
-    return "\n".join(truncated)
+    combined = f"STDOUT:\n{r.stdout}\n\nSTDERR:\n{r.stderr}\nReturn code: {r.returncode}\n"
+    faults = [s for s in _MEM_FAULT_SIGNATURES if s.lower() in (r.stdout + r.stderr).lower()]
+    if faults:
+        return combined + f"\nMEMCHECK: FAIL — detected fault signatures: {faults}\n"
+    if r.returncode != 0:
+        # A non-zero exit with no fault signature is a build error, a bad device string, or a
+        # Python exception in the runner — a tool failure, not a memcheck verdict. Reporting it
+        # as "MEMCHECK: FAIL" would send an agent hunting for a memory bug that isn't there.
+        return (
+            f"ERROR: the solution runner exited with code {r.returncode} without any GPU "
+            f"memory-fault signature, so this is a run failure rather than a memcheck result.\n"
+            + combined
+        )
+    return combined + (
+        "\nMEMCHECK: no GPU memory fault detected.\n"
+        f"DETECTION: {_xnack_status(run_env)}\n"
+        "NOTE: ROCm has no full compute-sanitizer equivalent; this only catches faults that abort "
+        "the process (illegal address / page fault). It does NOT detect benign OOB reads, "
+        "uninitialized memory, or races. For deeper checks, build the kernel with ROCm's LLVM "
+        "AddressSanitizer (-fsanitize=address, xnack) or inspect with rocgdb.\n"
+    )
 
 
 def flashinfer_bench_run_sanitizer(
     solution: Union[Solution, str],
     workload: Union[Workload, str],
     *,
-    # Runtime environment
     device: str = "cuda:0",
     trace_set_path: Optional[str] = None,
-    # Sanitizer configuration
     sanitizer_types: Optional[List[SanitizerType]] = None,
-    sanitizer_path: str = "compute-sanitizer",
-    # Execution control
     timeout: int = 300,
     tmpdir: Optional[str] = None,
     max_lines: Optional[int] = None,
 ) -> str:
-    """Run compute-sanitizer checks on a solution with a specific workload:
-    memcheck, racecheck, initcheck, synccheck.
+    """Run best-effort memory checks on a solution+workload (ROCm).
 
     Parameters
     ----------
     solution : Solution or str
-        The solution to check. Can be a Solution object or a path to a JSON file.
+        Solution object or path to a solution JSON file.
     workload : Workload or str
-        The workload configuration specifying input dimensions and data. Can be a
-        Workload object or a path to a JSON file.
-    device : str, optional
-        CUDA device to run on. Default is "cuda:0".
+        Workload object or path to a workload JSON file.
+    device : str
+        Device to run on ("cuda" device string on ROCm). Default "cuda:0".
     trace_set_path : str, optional
-        Path to the trace set. If not provided, uses FIB_DATASET_PATH environment variable.
+        Path to the trace set. Defaults to FIB_DATASET_PATH.
     sanitizer_types : List[SanitizerType], optional
-        List of sanitizer tools to run. Default runs all: memcheck, racecheck,
-        initcheck, synccheck.
-    sanitizer_path : str, optional
-        Path to the compute-sanitizer executable. Default is "compute-sanitizer".
-    timeout : int, optional
-        Timeout in seconds for each sanitizer check. Default is 300.
+        Which checks to run. Default ["memcheck"]. On ROCm only "memcheck" is supported
+        (best-effort); "racecheck"/"initcheck"/"synccheck" report as unsupported.
+    timeout : int
+        Timeout in seconds per check. Default 300.
     tmpdir : str, optional
-        Temporary directory. If not provided, uses system default.
+        Temporary directory.
     max_lines : int, optional
-        Maximum number of lines in output. If None, returns full output.
+        Truncate output to this many lines.
 
     Returns
     -------
     str
-        Sanitizer results as text, or error message starting with "ERROR:".
+        Results text, or an error string starting with "ERROR:".
     """
     if sanitizer_types is None:
-        sanitizer_types = list(VALID_SANITIZER_TYPES)
-
+        sanitizer_types = ["memcheck"]
     for st in sanitizer_types:
         if st not in VALID_SANITIZER_TYPES:
-            return f"ERROR: Invalid sanitizer type '{st}'. Must be one of: {VALID_SANITIZER_TYPES}"
+            # sorted(): a bare set repr reorders per process (string hash randomization), which
+            # makes this message unstable for agents that parse or diff tool output.
+            valid = ", ".join(sorted(VALID_SANITIZER_TYPES))
+            return f"ERROR: Invalid sanitizer type '{st}'. Must be one of: {valid}"
 
     if isinstance(solution, str):
-        path = Path(solution)
-        if not path.exists():
+        p = Path(solution)
+        if not p.exists():
             return f"ERROR: Solution file not found: {solution}"
         try:
-            solution = Solution.model_validate_json(path.read_text())
+            solution = Solution.model_validate_json(p.read_text())
         except Exception as e:
             return f"ERROR: Failed to parse solution file: {e}"
 
     if isinstance(workload, str):
-        path = Path(workload)
-        if not path.exists():
+        p = Path(workload)
+        if not p.exists():
             return f"ERROR: Workload file not found: {workload}"
         try:
-            workload = Workload.model_validate_json(path.read_text())
+            workload = Workload.model_validate_json(p.read_text())
         except Exception as e:
             return f"ERROR: Failed to parse workload file: {e}"
 
@@ -136,71 +191,45 @@ def flashinfer_bench_run_sanitizer(
     if solution.definition not in trace_set.definitions:
         return (
             f"ERROR: Definition '{solution.definition}' not found in trace database. "
-            f"Available definitions: {list(trace_set.definitions.keys())}"
+            f"Available: {list(trace_set.definitions.keys())}"
         )
     definition = trace_set.definitions[solution.definition]
 
-    if shutil.which(sanitizer_path) is None:
-        return (
-            f"ERROR: compute-sanitizer executable not found at '{sanitizer_path}'. "
-            "Please install NVIDIA CUDA toolkit."
-        )
-
-    with tempfile.TemporaryDirectory(prefix="fib_sanitizer_", dir=tmpdir) as build_dir:
-        build_path = Path(build_dir)
-
-        (build_path / "definition.json").write_text(definition.model_dump_json())
-        (build_path / "solution.json").write_text(solution.model_dump_json())
-        (build_path / "workload.json").write_text(workload.model_dump_json())
+    with tempfile.TemporaryDirectory(prefix="fib_sanitizer_", dir=tmpdir) as tmp:
+        data_dir = Path(tmp)
+        (data_dir / "definition.json").write_text(definition.model_dump_json())
+        (data_dir / "solution.json").write_text(solution.model_dump_json())
+        (data_dir / "workload.json").write_text(workload.model_dump_json())
 
         env = os.environ.copy()
         if tmpdir:
             env["TMPDIR"] = tmpdir
 
-        output = ""
-
-        for sanitizer_type in sanitizer_types:
-            output += f"\n{'=' * 60}\n"
-            output += f"Running {sanitizer_type.upper()}\n"
-            output += f"{'=' * 60}\n\n"
-
-            cmd = _build_sanitizer_command(
-                sanitizer_type,
-                build_path,
-                device,
-                Path(trace_set_path) if trace_set_path else None,
-                sanitizer_path,
-            )
-
-            logger.info("FlashInfer Bench Run Sanitizer: Running Command: %s", " ".join(cmd))
-
-            try:
-                result = subprocess.run(
-                    cmd, capture_output=True, text=True, env=env, timeout=timeout
+        out = ""
+        for st in sanitizer_types:
+            out += f"\n{'=' * 60}\n{st.upper()}\n{'=' * 60}\n\n"
+            if st in _UNSUPPORTED_ON_ROCM:
+                out += (
+                    f"{st} is not supported on ROCm: NVIDIA compute-sanitizer's {st} has no AMD "
+                    "equivalent. Skipped. (memcheck is available as a best-effort fault detector.)\n"
                 )
+                continue
+            result = _run_memcheck(
+                data_dir, device, Path(trace_set_path) if trace_set_path else None, timeout, env
+            )
+            # Preserve the agent-tool contract: an error must be returned as a string that
+            # *starts* with "ERROR:", so short-circuit instead of burying it in section output.
+            if result.startswith("ERROR:"):
+                # Honour max_lines on this path too — the error embeds the runner's full
+                # stdout/stderr and can be very large. Only the body is truncated, so the
+                # "ERROR:" first line survives any limit (max_lines=0 included).
+                if max_lines is None:
+                    return result
+                header, _, body = result.partition("\n")
+                return f"{header}\n{truncate(body, max_lines)}" if body else header
+            out += result
 
-                output += f"STDOUT:\n{result.stdout}\n\n"
-
-                if result.stderr:
-                    output += f"STDERR:\n{result.stderr}\n\n"
-
-                output += f"Return code: {result.returncode}\n"
-
-                if result.returncode != 0:
-                    output += f"\nWARNING: {sanitizer_type} detected issues!\n"
-                else:
-                    output += f"\n{sanitizer_type} passed successfully.\n"
-
-            except subprocess.TimeoutExpired:
-                output += f"ERROR: {sanitizer_type} timed out after {timeout} seconds.\n"
-            except Exception as e:
-                output += f"ERROR: Failed to run {sanitizer_type}: {e}\n"
-
-        output += f"\n{'=' * 60}\n"
-        output += "Sanitizer checks complete\n"
-        output += f"{'=' * 60}\n"
-
-        if max_lines:
-            output = _truncate_output(output, max_lines)
-
-        return output
+        out += f"\n{'=' * 60}\nSanitizer checks complete\n{'=' * 60}\n"
+        if max_lines is not None:
+            out = truncate(out, max_lines)
+        return out

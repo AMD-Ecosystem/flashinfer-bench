@@ -17,6 +17,8 @@ from flashinfer_bench.bench.utils import gen_inputs, load_safetensors
 from flashinfer_bench.compile import BuilderRegistry
 from flashinfer_bench.data import Definition, Solution, Workload
 
+from ._profiling import PROFILE_REGION
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run solution for profiling")
@@ -55,7 +57,7 @@ def main():
     torch.cuda.synchronize()
 
     # Actual run for profiling (marked with NVTX for NCU filtering)
-    with torch.cuda.nvtx.range("flashinfer_bench_ncu_profile"):
+    with torch.cuda.nvtx.range(PROFILE_REGION):
         with torch.no_grad():
             runnable.call_destination_passing(*inputs, *outputs)
         torch.cuda.synchronize()

@@ -1,6 +1,33 @@
 """Prompt templates for TVM FFI API documentation used by agents."""
 
-FFI_PROMPT_SIMPLE = """
+_ROCM_TARGET_NOTE = """
+# Target platform: AMD ROCm / CDNA (gfx942 — MI300X/MI325X)
+
+Kernels are compiled and run on AMD Instinct GPUs via tvm-ffi's HIP backend (hipcc). Keep this in
+mind when writing the host function and device kernel:
+
+- Write HIP or CUDA C++. CUDA `.cu` sources are automatically hipified at build time (so
+  `cuda_runtime.h` / `cudaMalloc` / cuBLAS-style code compiles), but prefer HIP idioms directly for
+  clarity: `#include <hip/hip_runtime.h>`, `hipStream_t`, `hipGetErrorString`, `hipLaunchKernelGGL`
+  or `<<<>>>`.
+- PyTorch still uses `device="cuda"` on ROCm, but **DLPack does not follow that aliasing**: a ROCm
+  tensor reports device type `kDLROCM` (10), not `kDLCUDA` (2). If you branch on `device_type`,
+  accept both so the kernel works on either backend. The tvm-ffi environment stream is a HIP
+  stream (aliased as `cudaStream_t` under HIP).
+- Wavefront size is 64 on CDNA (not 32). Size block dims, reductions, and shuffles for 64-lane
+  wavefronts; use `__launch_bounds__` to control occupancy. LDS is 64 KB/CU on gfx942.
+- Avoid NVIDIA-only constructs: PTX inline asm, warp-sync-mask intrinsics (`__shfl_sync`), and
+  nvcc-specific WMMA. Use HIP `__shfl`/`__ballot` (64-lane) and, for matmul/attention, AMD matrix
+  cores (MFMA) via Composable Kernel / rocWMMA.
+- For heavy GEMM/attention, prefer AMD's tuned libraries (AITER, hipBLASLt/rocBLAS) over naive
+  loops. Declare a BLAS dependency (e.g. `cublas`) in the build spec; it links as hipBLAS/rocBLAS.
+  Note cuBLAS `__half*` APIs correspond to hipBLAS `hipblasHalf*` and may need a manual cast.
+
+"""
+
+FFI_PROMPT_SIMPLE = (
+    _ROCM_TARGET_NOTE
+    + """
 Use TVM FFI format for your generated kernel host function and bindings
 
 # TVM FFI API Documentation
@@ -161,9 +188,12 @@ TVM_FFI_DLL_EXPORT_TYPED_FUNC(add_one_cuda, AddOne);
 }  // namespace my_kernels
 ```
 """
+)
 """Simplified TVM FFI API documentation with essential methods and a basic example."""
 
-FFI_PROMPT = """
+FFI_PROMPT = (
+    _ROCM_TARGET_NOTE
+    + """
 Use TVM FFI format for your generated kernel host function and bindings
 
 # TVM FFI API Documentation
@@ -588,4 +618,5 @@ TVM_FFI_DLL_EXPORT_TYPED_FUNC(add_one_cuda, AddOne);
 }  // namespace my_kernels
 ```
 """
+)
 """Comprehensive TVM FFI API documentation with full method signatures and multiple examples."""

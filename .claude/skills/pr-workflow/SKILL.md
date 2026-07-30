@@ -153,13 +153,21 @@ before considering the PR done:
    commits to the branch, `git fetch` and integrate them before adding your own (rebase; resolve
    conflicts keeping the more complete version).
 
-2. **Evaluate each comment on its merits.** Decide per comment whether to fix it — the reviewer is
-   often right but not always. Use judgement; do not blanket-apply.
+2. **Read the review *bodies*, not just the threads — an empty thread list does not mean the review
+   is handled.** Copilot files some findings in a collapsed `<details>` block titled "Comments
+   suppressed due to low confidence (N)" inside the review body; these never become
+   `reviewThread`s, so they are invisible to the GraphQL query below and to the PR's "unresolved
+   conversations" count. Fetch every review body after each push and read that section.
 
-3. **Address the ones worth fixing**, commit, and push to the PR branch (with consent, per the
+3. **Evaluate each comment on its merits.** Decide per comment whether to fix it — the reviewer is
+   often right but not always. Use judgement; do not blanket-apply. Apply the same scrutiny to the
+   suppressed findings: the low-confidence label describes the reviewer's certainty, not the
+   finding's validity.
+
+4. **Address the ones worth fixing**, commit, and push to the PR branch (with consent, per the
    ask-before-push rule above).
 
-4. **Resolve every thread**, with the right closure for each:
+5. **Resolve every thread**, with the right closure for each:
    - *Fixed* → reply citing the commit SHA, then resolve the thread.
    - *Won't fix* → reply with the reason you decided not to address it, then resolve the thread.
 
@@ -167,16 +175,19 @@ before considering the PR done:
    The threaded reply sits next to the code it concerns and the commit message carries the detail; a
    summary comment duplicates both and clutters the conversation.
 
-5. **Findings with no thread to reply to** get a single top-level comment, scoped to just those.
-   Copilot puts some findings in the review *body* rather than inline — notably its collapsed
-   "comments suppressed due to low confidence" section — and those have no `reviewThread`, so a
-   top-level comment is the only way to record their closure. This is the **one** case where a
-   top-level comment is right.
+6. **The suppressed findings from step 2** have no thread to reply to, so record their closure in a
+   single top-level comment scoped to just that batch. This is the **one** case where a top-level
+   comment is right.
 
 List and resolve threads via GraphQL (thread resolution and the `isResolved` flag are not exposed
 over REST; replying to a comment is):
 
 ```bash
+# Read the review bodies — this is where "suppressed due to low confidence" findings hide.
+gh api repos/AMD-Ecosystem/flashinfer-bench/pulls/<PR>/reviews \
+  -q '.[] | "\(.submitted_at) \(.user.login) id=\(.id)"'
+gh api repos/AMD-Ecosystem/flashinfer-bench/pulls/<PR>/reviews/<reviewId> -q '.body'
+
 # List threads (id + resolved + comment bodies). Bump first: for large PRs.
 gh api graphql -f query='
 { repository(owner:"AMD-Ecosystem", name:"flashinfer-bench") {
