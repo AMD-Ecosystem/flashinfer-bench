@@ -33,8 +33,14 @@ pip install -v -e .
 On AMD Instinct GPUs (CDNA3 gfx942 — MI300X/MI325X; CDNA4 gfx950 additive), the GPU dependencies
 come from AMD's package indexes rather than PyPI.
 
-> ROCm support (the `docker/rocm/` container and the `[rocm]` extra) lives in the ROCm fork/branch,
-> `AMD-Ecosystem/flashinfer-bench` — clone that (not the upstream URL above) to get these scripts.
+> ROCm support (the `docker/rocm/` container and the `[rocm]` extra) lives in the ROCm fork,
+> `AMD-Ecosystem/flashinfer-bench`, not in upstream `flashinfer-ai/flashinfer-bench`.
+
+```bash
+# Clone the ROCm fork — not the upstream URL used in "Install from Source" above
+git clone https://github.com/AMD-Ecosystem/flashinfer-bench.git
+cd flashinfer-bench
+```
 
 The supported, reproducible path is the ROCm dev container:
 
@@ -50,7 +56,9 @@ See `docker/rocm/README.md` for details. To install into an existing ROCm enviro
 ```bash
 # 1) ROCm build of torch (match your ROCm version). The Radeon URL is a find-links page
 #    (not a PEP 503 index), so use -f to keep PyPI available for torch's pure-python deps.
-pip install torch -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2/
+#    Pin the version: unpinned, pip can prefer a newer CPU-only torch from PyPI over the ROCm
+#    wheel and silently break the install. 2.9.1 / ROCm 7.2 is what docker/rocm/Dockerfile pins.
+pip install "torch==2.9.1" -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2/
 # 2) flashinfer-bench + ROCm extras. The two AMD wheels are published under different, ROCm-version-
 #    specific index paths (mirrors docker/rocm/Dockerfile) — don't mix versions:
 #      amd-flashinfer (imports as `flashinfer`) -> rocm-7.2.0 index

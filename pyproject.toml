@@ -25,7 +25,7 @@ classifiers = [
 ]
 dependencies = [
   # torch must be the ROCm build on AMD GPUs; install it first from
-  # https://repo.radeon.com/rocm/manylinux/rocm-rel-<ver>/ (see docs/start/installation).
+  # https://repo.radeon.com/rocm/manylinux/rocm-rel-<ver>/ (see docs/start/installation.mdx).
   "torch>=2.8.0",
   "pydantic>=2.0.0",
   "safetensors>=0.5.0",
