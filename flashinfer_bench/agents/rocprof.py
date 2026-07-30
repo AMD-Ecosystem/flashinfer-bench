@@ -92,12 +92,17 @@ def _build_cmd(
 
 
 def _read_csv(pattern: str) -> List[dict]:
-    """Read the first CSV matching a glob into a list of dict rows (empty if none)."""
-    files = glob.glob(pattern, recursive=True)
-    if not files:
-        return []
-    with open(files[0], newline="") as f:
-        return list(csv.DictReader(f))
+    """Read every CSV matching a glob into one list of dict rows (empty if none).
+
+    rocprofv3 emits one CSV per profiled process, so a run can produce several matches. Read all
+    of them in sorted order instead of an arbitrary glob hit, which would otherwise parse a
+    nondeterministic (and possibly wrong) file.
+    """
+    rows: List[dict] = []
+    for path in sorted(glob.glob(pattern, recursive=True)):
+        with open(path, newline="") as f:
+            rows.extend(csv.DictReader(f))
+    return rows
 
 
 def _region_window(out_dir: Path) -> Optional[tuple]:
@@ -107,7 +112,7 @@ def _region_window(out_dir: Path) -> Optional[tuple]:
         if _PROFILE_REGION in (r.get("Name") or ""):
             try:
                 return int(r["Start_Timestamp"]), int(r["End_Timestamp"])
-            except (KeyError, ValueError):
+            except (KeyError, TypeError, ValueError):
                 return None
     return None
 
@@ -118,23 +123,25 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
     if not rows:
         return "ERROR: no kernel-trace output produced by rocprofv3."
 
-    window = _region_window(out_dir)
-    selected = []
+    # Parse timestamps once, up front: rows rocprofv3 emits with missing or non-integer
+    # timestamps are dropped here, so neither the windowed nor the fallback path can raise.
+    parsed = []
     for r in rows:
         try:
             start, end = int(r["Start_Timestamp"]), int(r["End_Timestamp"])
-        except (KeyError, ValueError):
+        except (KeyError, TypeError, ValueError):
             continue
-        if window is not None and not (start >= window[0] and end <= window[1]):
-            continue
-        selected.append((r, end - start))
+        parsed.append((r, start, end))
+
+    window = _region_window(out_dir)
+    selected = [
+        (r, end - start)
+        for r, start, end in parsed
+        if window is None or (start >= window[0] and end <= window[1])
+    ]
     # Fall back to all kernels if region correlation found nothing.
     if not selected:
-        selected = [
-            (r, int(r["End_Timestamp"]) - int(r["Start_Timestamp"]))
-            for r in rows
-            if r.get("Start_Timestamp") and r.get("End_Timestamp")
-        ]
+        selected = [(r, end - start) for r, start, end in parsed]
 
     selected.sort(key=lambda x: x[1], reverse=True)
     lines = [
@@ -269,6 +276,8 @@ def flashinfer_bench_run_rocprof(
             result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=timeout)
         except subprocess.TimeoutExpired:
             return f"ERROR: rocprofv3 timed out after {timeout} seconds."
+        except OSError as e:  # on PATH but not launchable (permissions, bad interpreter)
+            return f"ERROR: failed to launch rocprofv3: {e}"
 
         if result.returncode != 0:
             return (
