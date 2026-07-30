@@ -45,7 +45,9 @@ def _truncate_output(output: str, max_lines: int) -> str:
     return "\n".join(lines[:max_lines]) + f"\n[... {len(lines) - max_lines} more lines]"
 
 
-def _run_memcheck(data_dir: Path, device: str, trace_set_path: Optional[Path], timeout: int, env) -> str:
+def _run_memcheck(
+    data_dir: Path, device: str, trace_set_path: Optional[Path], timeout: int, env
+) -> str:
     """Best-effort memcheck: run the solution and detect GPU memory faults."""
     cmd = [
         sys.executable,
@@ -178,11 +180,7 @@ def flashinfer_bench_run_sanitizer(
                 )
                 continue
             result = _run_memcheck(
-                data_dir,
-                device,
-                Path(trace_set_path) if trace_set_path else None,
-                timeout,
-                env,
+                data_dir, device, Path(trace_set_path) if trace_set_path else None, timeout, env
             )
             # Preserve the agent-tool contract: an error must be returned as a string that
             # *starts* with "ERROR:", so short-circuit instead of burying it in section output.

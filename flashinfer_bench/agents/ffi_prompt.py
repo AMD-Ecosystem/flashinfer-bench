@@ -23,7 +23,9 @@ mind when writing the host function and device kernel:
 
 """
 
-FFI_PROMPT_SIMPLE = _ROCM_TARGET_NOTE + """
+FFI_PROMPT_SIMPLE = (
+    _ROCM_TARGET_NOTE
+    + """
 Use TVM FFI format for your generated kernel host function and bindings
 
 # TVM FFI API Documentation
@@ -184,9 +186,12 @@ TVM_FFI_DLL_EXPORT_TYPED_FUNC(add_one_cuda, AddOne);
 }  // namespace my_kernels
 ```
 """
+)
 """Simplified TVM FFI API documentation with essential methods and a basic example."""
 
-FFI_PROMPT = _ROCM_TARGET_NOTE + """
+FFI_PROMPT = (
+    _ROCM_TARGET_NOTE
+    + """
 Use TVM FFI format for your generated kernel host function and bindings
 
 # TVM FFI API Documentation
@@ -611,4 +616,5 @@ TVM_FFI_DLL_EXPORT_TYPED_FUNC(add_one_cuda, AddOne);
 }  // namespace my_kernels
 ```
 """
+)
 """Comprehensive TVM FFI API documentation with full method signatures and multiple examples."""
