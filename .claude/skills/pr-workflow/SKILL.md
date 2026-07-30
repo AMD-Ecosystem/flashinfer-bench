@@ -163,6 +163,16 @@ before considering the PR done:
    - *Fixed* → reply citing the commit SHA, then resolve the thread.
    - *Won't fix* → reply with the reason you decided not to address it, then resolve the thread.
 
+   **Reply in the thread — do not also post a top-level PR comment summarizing what you addressed.**
+   The threaded reply sits next to the code it concerns and the commit message carries the detail; a
+   summary comment duplicates both and clutters the conversation.
+
+5. **Findings with no thread to reply to** get a single top-level comment, scoped to just those.
+   Copilot puts some findings in the review *body* rather than inline — notably its collapsed
+   "comments suppressed due to low confidence" section — and those have no `reviewThread`, so a
+   top-level comment is the only way to record their closure. This is the **one** case where a
+   top-level comment is right.
+
 List and resolve threads via GraphQL (thread resolution and the `isResolved` flag are not exposed
 over REST; replying to a comment is):
 
