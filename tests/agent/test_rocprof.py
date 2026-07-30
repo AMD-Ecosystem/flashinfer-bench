@@ -97,10 +97,14 @@ def test_truncate_respects_limit_and_none():
     assert "7 more lines" in capped
 
 
-def test_truncate_keeps_error_prefix_first_at_zero():
-    """max_lines=0 must not strip the "ERROR:" prefix off the front of an error string."""
+def test_truncate_at_zero_has_no_leading_blank_line():
+    """max_lines=0 keeps the "ERROR:" prefix first AND must not open with a blank line."""
     detail = _truncate("boom\nmore", 0)
-    assert f"ERROR: rocprofv3 exited with code 1:\n{detail}".startswith("ERROR:")
+
+    assert detail == "[... 2 more lines]"  # marker alone, no leading newline
+    rendered = f"ERROR: rocprofv3 exited with code 1:\n{detail}"
+    assert rendered.startswith("ERROR:")
+    assert "\n\n" not in rendered
 
 
 def test_format_kernel_report_errors_when_no_row_parses(tmp_path):

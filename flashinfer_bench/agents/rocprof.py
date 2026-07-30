@@ -112,7 +112,11 @@ def _truncate(text: str, max_lines: Optional[int]) -> str:
     parts = text.split("\n")
     if len(parts) <= max_lines:
         return text
-    return "\n".join(parts[:max_lines]) + f"\n[... {len(parts) - max_lines} more lines]"
+    head = "\n".join(parts[:max_lines])
+    # max_lines=0 keeps nothing, so emit the marker alone — joining an empty head would open the
+    # output with a stray blank line (visible as "ERROR:\n\n[...]" on the error paths).
+    marker = f"[... {len(parts) - max_lines} more lines]"
+    return f"{head}\n{marker}" if head else marker
 
 
 def _region_window(out_dir: Path) -> Optional[tuple]:
@@ -183,7 +187,8 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
         )
         lines.append(f"    {name}")
 
-    # Include any counter (PMC) CSV verbatim if present.
+    # Note whether counters (PMC) were collected. Only the row count is reported — a full counter
+    # dump would dwarf the kernel report, so the values stay in the CSV on disk.
     pmc = _read_csv(str(out_dir / "**" / "*counter_collection*.csv"))
     if pmc:
         lines += ["", f"Hardware counters ({len(pmc)} rows) — see counter_collection CSV."]

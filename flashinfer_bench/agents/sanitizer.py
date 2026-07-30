@@ -67,7 +67,10 @@ def _truncate_output(output: str, max_lines: int) -> str:
     lines = output.split("\n")
     if len(lines) <= max_lines:
         return output
-    return "\n".join(lines[:max_lines]) + f"\n[... {len(lines) - max_lines} more lines]"
+    head = "\n".join(lines[:max_lines])
+    # max_lines=0 keeps nothing, so emit the marker alone rather than opening with a blank line.
+    marker = f"[... {len(lines) - max_lines} more lines]"
+    return f"{head}\n{marker}" if head else marker
 
 
 def _run_memcheck(
