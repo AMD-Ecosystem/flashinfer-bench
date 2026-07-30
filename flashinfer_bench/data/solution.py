@@ -92,8 +92,9 @@ class BuildSpec(BaseModelWithDocstrings):
     """The exact path to the function to be called. Format: '{file_path}::{function_name}'
     (e.g., 'main.py::run')."""
     dependencies: List[NonEmptyString] = Field(default_factory=list)
-    """Optional list of required libraries or packages. E.g. for CUDA, we support 'cublas',
-    'cudnn', 'cutlass'"""
+    """Optional list of required libraries a C++/CUDA solution links against. On ROCm the TVM-FFI
+    builder recognizes BLAS dependencies and links hipBLAS/rocBLAS (the CUDA name 'cublas' is
+    accepted and mapped to them); other names are ignored by the builder."""
     destination_passing_style: bool = True
     """Whether to use destination passing style for the solution. If True, the solution should
     accept the output tensors as the last arguments. If False, the solution should return the

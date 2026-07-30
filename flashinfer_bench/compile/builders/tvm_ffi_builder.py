@@ -7,6 +7,7 @@ import ctypes
 import logging
 import os
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Callable, ClassVar, List, Optional, Tuple
 
@@ -55,26 +56,51 @@ class TVMFFIBuilder(Builder):
         """Initialize the TVMFFIBuilder."""
         super().__init__(self._PACKAGE_PREFIX, self._BUILD_DIR_NAME)
 
-    @staticmethod
-    def _find_cuda_lib_path() -> Optional[str]:
-        """Find the CUDA library directory (cublas, cufft, curand, etc.)."""
-        nvcc = shutil.which("nvcc")
-        if nvcc:
-            cuda_home = Path(nvcc).resolve().parent.parent
-            for candidate in [
-                cuda_home / "targets" / "x86_64-linux" / "lib",
-                cuda_home / "lib64",
-                cuda_home / "lib",
-            ]:
-                if (candidate / "libcudart.so").exists():
-                    return str(candidate)
+    # BLAS dependency names a solution may declare (the CUDA name `cublas` is accepted and mapped).
+    # Only hipBLAS/rocBLAS are linked below; hipBLASLt (a separate lib/header) is not wired yet.
+    _BLAS_DEPS: ClassVar[List[str]] = ["cublas", "hipblas", "rocblas"]
 
-        for prefix in ["/usr/local/cuda", "/usr/local/cuda-12", "/usr/local/cuda-13"]:
-            for sub in ["targets/x86_64-linux/lib", "lib64", "lib"]:
-                p = Path(prefix) / sub
-                if (p / "libcudart.so").exists():
-                    return str(p)
+    @staticmethod
+    def _is_hip_backend() -> bool:
+        """Whether tvm-ffi will use the HIP (ROCm) backend, mirroring its own auto-detection.
+
+        HIP if torch is a ROCm build (``torch.version.hip``), or if ``hipcc`` is available and
+        ``nvcc`` is not. Used to gate the ROCm-specific hipify/BLAS handling so it never runs when a
+        CUDA (nvcc) toolchain would actually be selected.
+        """
+        try:
+            import torch
+
+            if getattr(torch.version, "hip", None):
+                return True
+        except Exception:
+            pass
+        return shutil.which("hipcc") is not None and shutil.which("nvcc") is None
+
+    @staticmethod
+    def _find_rocm_lib_path() -> Optional[str]:
+        """Find the ROCm library directory (hipblas, rocblas, etc.).
+
+        Honors ROCM_PATH / HIP_PATH, then falls back to the conventional /opt/rocm. Checks both
+        ``lib`` and ``lib64`` and accepts a versioned ``libamdhip64.so*`` soname.
+        """
+        roots: List[Path] = []
+        for env in ("ROCM_PATH", "HIP_PATH"):
+            root = os.environ.get(env)
+            if root:
+                roots.append(Path(root))
+        roots.append(Path("/opt/rocm"))
+        for root in roots:
+            for sub in ("lib", "lib64"):
+                lib_dir = root / sub
+                if any(lib_dir.glob("libamdhip64.so*")):
+                    return str(lib_dir)
         return None
+
+    def _needs_blas(self, solution: Solution) -> bool:
+        """True if the solution declares a BLAS dependency (cublas/hipblas/rocblas)."""
+        deps = [d.lower() for d in (solution.spec.dependencies or [])]
+        return any(d in self._BLAS_DEPS for d in deps)
 
     @staticmethod
     def is_available() -> bool:
@@ -187,6 +213,51 @@ class TVMFFIBuilder(Builder):
 
         return cpp_files, cuda_files
 
+    def _hipify_sources(self, source_paths: List[Path], build_path: Path) -> List[Path]:
+        """Translate CUDA sources to HIP so CUDA-authored solutions compile on ROCm.
+
+        Unlike PyTorch's cpp_extension, tvm-ffi compiles ``.cu`` directly with ``hipcc -x hip`` and
+        does NOT run hipify, so CUDA-API source (e.g. ``#include <cuda_runtime.h>``, ``cudaMalloc``)
+        fails. This translates every source with ``hipify-perl`` into a parallel ``_hipified/``
+        directory (preserving relative paths so cross-file includes resolve) and returns the new
+        paths. Hipify is idempotent on HIP-native source. The original written sources are left
+        untouched so the .so caching check (which compares them to ``solution.content``) still works.
+
+        If ``hipify-perl`` is unavailable, returns the original paths unchanged (best-effort).
+        """
+        hipify = shutil.which("hipify-perl")
+        if hipify is None:
+            logger.warning("hipify-perl not found; compiling sources without CUDA->HIP translation")
+            return source_paths
+
+        hip_root = build_path / "_hipified"
+        out_paths: List[Path] = []
+        for src in source_paths:
+            rel = src.relative_to(build_path)
+            dst = hip_root / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                result = subprocess.run(
+                    [hipify, str(src)], capture_output=True, text=True, timeout=120
+                )
+                if result.returncode == 0:
+                    dst.write_text(result.stdout)
+                else:
+                    # Log the real hipify error so a later hipcc failure is diagnosable, then fall
+                    # back to the original source (best-effort).
+                    logger.warning(
+                        "hipify-perl exited %d for %s; using original source. stderr:\n%s",
+                        result.returncode,
+                        src,
+                        result.stderr,
+                    )
+                    dst.write_text(src.read_text())
+            except Exception:
+                logger.warning("hipify-perl failed for %s; using original source", src, exc_info=True)
+                dst.write_text(src.read_text())
+            out_paths.append(dst)
+        return out_paths
+
     def _get_entry_symbol(self, solution: Solution) -> str:
         """Extract function symbol from entry_point.
 
@@ -280,17 +351,37 @@ class TVMFFIBuilder(Builder):
                     output_lib_path = str(build_path / f"{package_name}.so")
                 else:
                     src_paths = write_sources_to_path(build_path, solution.sources)
-                    cpp_files, cuda_files = self._filter_sources(src_paths)
                     extra_include_paths = [str(build_path)]
                     extra_ldflags: List[str] = []
-                    needs_cuda_link = bool(cuda_files) or any(
-                        target.lower() == "cuda" for target in solution.spec.target_hardware
-                    )
-                    if needs_cuda_link:
-                        extra_ldflags = ["-lcuda", "-lcublas"]
-                        cuda_lib_path = self._find_cuda_lib_path()
-                        if cuda_lib_path:
-                            extra_ldflags.insert(0, f"-L{cuda_lib_path}")
+                    # ROCm-specific handling is gated on tvm-ffi actually selecting the HIP backend,
+                    # so it never runs under a CUDA (nvcc) toolchain (where hipified sources would
+                    # fail to compile).
+                    if self._is_hip_backend():
+                        # Translate CUDA -> HIP so CUDA-authored solutions compile under tvm-ffi's
+                        # hipcc backend (idempotent on HIP-native source). Originals are kept for the
+                        # .so cache check; compilation uses the hipified copies.
+                        hipified_paths = self._hipify_sources(src_paths, build_path)
+                        cpp_files, cuda_files = self._filter_sources(hipified_paths)
+                        extra_include_paths.append(str(build_path / "_hipified"))
+                        # tvm-ffi links the HIP runtime (libamdhip64) itself, so we add no GPU-runtime
+                        # flags. When a solution declares a BLAS dependency we add hipBLAS/rocBLAS
+                        # (the ROCm equivalents of cuBLAS). hipify rewrites <cublas_v2.h> to
+                        # <hipblas.h>, but the header lives in include/hipblas/, so those subdirs are
+                        # added to the include path.
+                        if self._needs_blas(solution):
+                            rocm_lib_path = self._find_rocm_lib_path()
+                            if rocm_lib_path:
+                                extra_ldflags.append(f"-L{rocm_lib_path}")
+                                rocm_root = Path(rocm_lib_path).parent
+                                for sub in ("include/hipblas", "include/rocblas"):
+                                    inc = rocm_root / sub
+                                    if inc.is_dir():
+                                        extra_include_paths.append(str(inc))
+                            extra_ldflags += ["-lhipblas", "-lrocblas"]
+                    else:
+                        # Non-HIP backend (unmaintained CUDA path in this ROCm fork): compile the
+                        # original sources without hipify.
+                        cpp_files, cuda_files = self._filter_sources(src_paths)
                     try:
                         # Compile sources to shared library
                         output_lib_path = tvm_ffi.cpp.build(
