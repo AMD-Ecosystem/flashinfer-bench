@@ -11,7 +11,7 @@ recommendation, and ask for the user's input before assuming a direction.
 
 ## Engineering preferences (use these to guide recommendations)
 
-- **DRY is important** — tag repetition aggressively.
+- **DRY is important** — flag repetition aggressively.
 - **Well-tested code is non-negotiable** — err toward too many tests, not too few.
 - Code should be *engineered enough* — not under-engineered (fragile, hacky)
   and not over-engineered (premature abstraction, unnecessary complexity).
