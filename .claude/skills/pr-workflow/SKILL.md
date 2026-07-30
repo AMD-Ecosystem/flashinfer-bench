@@ -171,13 +171,22 @@ before considering the PR done:
    - *Fixed* → reply citing the commit SHA, then resolve the thread.
    - *Won't fix* → reply with the reason you decided not to address it, then resolve the thread.
 
-   **Reply in the thread — do not also post a top-level PR comment summarizing what you addressed.**
-   The threaded reply sits next to the code it concerns and the commit message carries the detail; a
-   summary comment duplicates both and clutters the conversation.
+   **For findings that have a thread, the threaded reply is the whole closure — do not additionally
+   post a top-level comment summarizing them.** The reply sits next to the code it concerns and the
+   commit message carries the detail; a summary comment duplicates both and clutters the
+   conversation. This prohibition is scoped to threaded findings; step 6 covers the rest.
 
 6. **The suppressed findings from step 2** have no thread to reply to, so record their closure in a
    single top-level comment scoped to just that batch. This is the **one** case where a top-level
    comment is right.
+
+   Steps 5 and 6 are complementary, not in tension. The rule is one closure per finding, in the only
+   place that finding *can* be closed:
+
+   | Finding kind | Closure |
+   |---|---|
+   | Has an inline thread | Threaded reply (fix + SHA, or won't-fix rationale) + resolve. No top-level comment. |
+   | No thread (suppressed, low-confidence) | One top-level comment scoped to just that batch. |
 
 List and resolve threads via GraphQL (thread resolution and the `isResolved` flag are not exposed
 over REST; replying to a comment is):
@@ -205,7 +214,14 @@ gh api graphql -f query='
 mutation { resolveReviewThread(input:{threadId:"<threadId>"}) { thread { isResolved } } }'
 ```
 
-Done = no unresolved threads remain, each carrying either a fix+SHA reply or a won't-fix rationale.
+Done = **both** of:
+
+- no unresolved threads remain, each carrying either a fix+SHA reply or a won't-fix rationale; and
+- every review body's suppressed-findings section has been read, and any batch found there is closed
+  by its own top-level comment.
+
+"Zero unresolved threads" alone is not done — suppressed findings never appear in that count, so a
+PR can look clean while real findings sit unaddressed in a collapsed `<details>` block.
 
 ## PR Description
 
