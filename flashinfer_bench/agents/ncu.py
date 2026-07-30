@@ -14,6 +14,7 @@ from typing import List, Optional, Union
 from flashinfer_bench.data import Solution, TraceSet, Workload
 
 from ._output import truncate
+from ._profiling import PROFILE_REGION
 
 logger = logging.getLogger(__name__)
 
@@ -89,16 +90,7 @@ def _build_ncu_command(
 ) -> List[str]:
     """Build the NCU command line."""
 
-    cmd = [
-        ncu_path,
-        "--page",
-        page,
-        "--set",
-        set,
-        "--nvtx",
-        "--nvtx-include",
-        "flashinfer_bench_ncu_profile]",
-    ]
+    cmd = [ncu_path, "--page", page, "--set", set, "--nvtx", "--nvtx-include", f"{PROFILE_REGION}]"]
 
     # Add extra sections
     if sections:

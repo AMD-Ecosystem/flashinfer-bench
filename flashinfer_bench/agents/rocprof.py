@@ -24,11 +24,9 @@ from typing import List, Optional, Union
 from flashinfer_bench.data import Solution, TraceSet, Workload
 
 from ._output import truncate
+from ._profiling import PROFILE_REGION
 
 logger = logging.getLogger(__name__)
-
-# roctx region emitted by _solution_runner around the profiled (non-warmup) run.
-_PROFILE_REGION = "flashinfer_bench_ncu_profile"
 
 
 def flashinfer_bench_list_rocprof_options(rocprof_avail_path: str = "rocprofv3-avail") -> str:
@@ -111,7 +109,7 @@ def _region_window(out_dir: Path) -> Optional[tuple]:
     """Return (start_ns, end_ns) of the profiled roctx region, or None if not found."""
     rows = _read_csv(str(out_dir / "**" / "*marker_api_trace*.csv"))
     for r in rows:
-        if _PROFILE_REGION in (r.get("Name") or ""):
+        if PROFILE_REGION in (r.get("Name") or ""):
             try:
                 return int(r["Start_Timestamp"]), int(r["End_Timestamp"])
             except (KeyError, TypeError, ValueError):
@@ -158,7 +156,7 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
 
     selected.sort(key=lambda x: x[1], reverse=True)
     lines = [
-        f"rocprofv3 kernel profile (region '{_PROFILE_REGION}', "
+        f"rocprofv3 kernel profile (region '{PROFILE_REGION}', "
         f"{len(selected)} kernel dispatch(es), sorted by duration):",
         "",
     ]

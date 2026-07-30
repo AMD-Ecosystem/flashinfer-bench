@@ -31,6 +31,22 @@ def test_truncate_at_zero_has_no_leading_blank_line():
     assert "\n\n" not in rendered
 
 
+def test_profile_region_is_shared_and_tool_agnostic():
+    """The emitter and both readers must resolve to one constant.
+
+    If they ever drift, region correlation finds nothing and the report silently widens to every
+    kernel on the device instead of failing — so pin it here rather than trusting a grep.
+    """
+    from flashinfer_bench.agents import _solution_runner, ncu, rocprof
+    from flashinfer_bench.agents._profiling import PROFILE_REGION
+
+    assert rocprof.PROFILE_REGION is PROFILE_REGION
+    assert ncu.PROFILE_REGION is PROFILE_REGION
+    assert _solution_runner.PROFILE_REGION is PROFILE_REGION
+    # Named for the job, not for one vendor's profiler — it is read by rocprofv3 and NCU alike.
+    assert "ncu" not in PROFILE_REGION
+
+
 def test_all_agent_tools_share_one_truncate():
     """Guard against the drift that prompted the consolidation: one implementation, not three."""
     from flashinfer_bench.agents import ncu, rocprof, sanitizer

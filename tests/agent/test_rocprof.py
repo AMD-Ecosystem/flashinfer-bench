@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from flashinfer_bench.agents import flashinfer_bench_run_rocprof, get_all_tool_schemas
+from flashinfer_bench.agents._profiling import PROFILE_REGION
 from flashinfer_bench.agents.rocprof import _format_kernel_report, _read_csv
 
 _KERNEL_HEADER = "Kernel_Name,Start_Timestamp,End_Timestamp\n"
@@ -47,7 +48,7 @@ def test_format_kernel_report_skips_unparsable_timestamps(tmp_path):
     unguarded on a row whose timestamp is merely truthy.
     """
     (tmp_path / "marker_api_trace.csv").write_text(
-        "Name,Start_Timestamp,End_Timestamp\nflashinfer_bench_ncu_profile,1000,1100\n"
+        f"Name,Start_Timestamp,End_Timestamp\n{PROFILE_REGION},1000,1100\n"
     )
     (tmp_path / "kernel_trace.csv").write_text(
         _KERNEL_HEADER + "bad_kernel,not_a_number,also_bad\ngood_kernel,5000,6000\n"
@@ -72,8 +73,8 @@ def test_region_window_skips_malformed_marker_rows(tmp_path):
     """
     (tmp_path / "marker_api_trace.csv").write_text(
         "Name,Start_Timestamp,End_Timestamp\n"
-        "flashinfer_bench_ncu_profile,bogus,bogus\n"
-        "flashinfer_bench_ncu_profile,1000,9000\n"
+        f"{PROFILE_REGION},bogus,bogus\n"
+        f"{PROFILE_REGION},1000,9000\n"
     )
     (tmp_path / "kernel_trace.csv").write_text(
         _KERNEL_HEADER + "in_window,2000,3000\nout_of_window,20000,30000\n"

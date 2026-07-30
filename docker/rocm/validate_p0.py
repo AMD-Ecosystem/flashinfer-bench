@@ -123,7 +123,7 @@ def _():
 
     # If this maps to roctx, rocprofv3 --marker-trace will capture it; here we
     # just confirm the API exists and is callable on ROCm.
-    torch.cuda.nvtx.range_push("flashinfer_bench_ncu_profile")
+    torch.cuda.nvtx.range_push("flashinfer_bench_profile")
     torch.cuda.nvtx.range_pop()
     return "torch.cuda.nvtx range push/pop callable"
 
