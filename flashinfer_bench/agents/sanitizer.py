@@ -19,6 +19,8 @@ from typing import List, Literal, Optional, Union
 
 from flashinfer_bench.data import Solution, TraceSet, Workload
 
+from ._output import truncate
+
 logger = logging.getLogger(__name__)
 
 SanitizerType = Literal["memcheck", "racecheck", "initcheck", "synccheck"]
@@ -61,16 +63,6 @@ def _xnack_status(run_env) -> str:
     if arch:
         return f"HSA_XNACK={value}, device target {arch}."
     return f"HSA_XNACK={value} (device target undetermined)."
-
-
-def _truncate_output(output: str, max_lines: int) -> str:
-    lines = output.split("\n")
-    if len(lines) <= max_lines:
-        return output
-    head = "\n".join(lines[:max_lines])
-    # max_lines=0 keeps nothing, so emit the marker alone rather than opening with a blank line.
-    marker = f"[... {len(lines) - max_lines} more lines]"
-    return f"{head}\n{marker}" if head else marker
 
 
 def _run_memcheck(
@@ -234,10 +226,10 @@ def flashinfer_bench_run_sanitizer(
                 if max_lines is None:
                     return result
                 header, _, body = result.partition("\n")
-                return f"{header}\n{_truncate_output(body, max_lines)}" if body else header
+                return f"{header}\n{truncate(body, max_lines)}" if body else header
             out += result
 
         out += f"\n{'=' * 60}\nSanitizer checks complete\n{'=' * 60}\n"
         if max_lines is not None:
-            out = _truncate_output(out, max_lines)
+            out = truncate(out, max_lines)
         return out

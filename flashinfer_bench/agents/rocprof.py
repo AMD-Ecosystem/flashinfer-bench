@@ -23,6 +23,8 @@ from typing import List, Optional, Union
 
 from flashinfer_bench.data import Solution, TraceSet, Workload
 
+from ._output import truncate
+
 logger = logging.getLogger(__name__)
 
 # roctx region emitted by _solution_runner around the profiled (non-warmup) run.
@@ -105,20 +107,6 @@ def _read_csv(pattern: str) -> List[dict]:
     return rows
 
 
-def _truncate(text: str, max_lines: Optional[int]) -> str:
-    """Cap ``text`` at ``max_lines`` lines, noting how many were dropped. None means no limit."""
-    if max_lines is None:
-        return text
-    parts = text.split("\n")
-    if len(parts) <= max_lines:
-        return text
-    head = "\n".join(parts[:max_lines])
-    # max_lines=0 keeps nothing, so emit the marker alone — joining an empty head would open the
-    # output with a stray blank line (visible as "ERROR:\n\n[...]" on the error paths).
-    marker = f"[... {len(parts) - max_lines} more lines]"
-    return f"{head}\n{marker}" if head else marker
-
-
 def _region_window(out_dir: Path) -> Optional[tuple]:
     """Return (start_ns, end_ns) of the profiled roctx region, or None if not found."""
     rows = _read_csv(str(out_dir / "**" / "*marker_api_trace*.csv"))
@@ -193,7 +181,7 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
     if pmc:
         lines += ["", f"Hardware counters ({len(pmc)} rows) — see counter_collection CSV."]
 
-    return _truncate("\n".join(lines), max_lines)
+    return truncate("\n".join(lines), max_lines)
 
 
 def flashinfer_bench_run_rocprof(
@@ -303,7 +291,7 @@ def flashinfer_bench_run_rocprof(
         if result.returncode != 0:
             # A failing rocprofv3 can emit a very large stdout/stderr, so honour max_lines here
             # too. Only the payload is truncated — the "ERROR:" prefix must survive any limit.
-            detail = _truncate(f"{result.stdout}\n{result.stderr}", max_lines)
+            detail = truncate(f"{result.stdout}\n{result.stderr}", max_lines)
             return f"ERROR: rocprofv3 exited with code {result.returncode}:\n{detail}"
 
         return _format_kernel_report(out_dir, max_lines)

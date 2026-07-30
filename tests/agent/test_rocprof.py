@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from flashinfer_bench.agents import flashinfer_bench_run_rocprof, get_all_tool_schemas
-from flashinfer_bench.agents.rocprof import _format_kernel_report, _read_csv, _truncate
+from flashinfer_bench.agents.rocprof import _format_kernel_report, _read_csv
 
 _KERNEL_HEADER = "Kernel_Name,Start_Timestamp,End_Timestamp\n"
 
@@ -84,27 +84,6 @@ def test_region_window_skips_malformed_marker_rows(tmp_path):
     assert "in_window" in out
     assert "out_of_window" not in out
     assert "1 kernel dispatch(es)" in out
-
-
-def test_truncate_respects_limit_and_none():
-    text = "\n".join(f"line{i}" for i in range(10))
-
-    assert _truncate(text, None) == text  # None means no limit
-    assert _truncate(text, 20) == text  # under the limit, unchanged
-
-    capped = _truncate(text, 3)
-    assert capped.split("\n")[:3] == ["line0", "line1", "line2"]
-    assert "7 more lines" in capped
-
-
-def test_truncate_at_zero_has_no_leading_blank_line():
-    """max_lines=0 keeps the "ERROR:" prefix first AND must not open with a blank line."""
-    detail = _truncate("boom\nmore", 0)
-
-    assert detail == "[... 2 more lines]"  # marker alone, no leading newline
-    rendered = f"ERROR: rocprofv3 exited with code 1:\n{detail}"
-    assert rendered.startswith("ERROR:")
-    assert "\n\n" not in rendered
 
 
 def test_format_kernel_report_errors_when_no_row_parses(tmp_path):
