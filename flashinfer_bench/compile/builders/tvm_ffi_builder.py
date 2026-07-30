@@ -253,7 +253,9 @@ class TVMFFIBuilder(Builder):
                     )
                     dst.write_text(src.read_text())
             except Exception:
-                logger.warning("hipify-perl failed for %s; using original source", src, exc_info=True)
+                logger.warning(
+                    "hipify-perl failed for %s; using original source", src, exc_info=True
+                )
                 dst.write_text(src.read_text())
             out_paths.append(dst)
         return out_paths
