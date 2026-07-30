@@ -195,7 +195,13 @@ def flashinfer_bench_run_sanitizer(
             # Preserve the agent-tool contract: an error must be returned as a string that
             # *starts* with "ERROR:", so short-circuit instead of burying it in section output.
             if result.startswith("ERROR:"):
-                return result
+                # Honour max_lines on this path too — the error embeds the runner's full
+                # stdout/stderr and can be very large. Only the body is truncated, so the
+                # "ERROR:" first line survives any limit (max_lines=0 included).
+                if max_lines is None:
+                    return result
+                header, _, body = result.partition("\n")
+                return f"{header}\n{_truncate_output(body, max_lines)}" if body else header
             out += result
 
         out += f"\n{'=' * 60}\nSanitizer checks complete\n{'=' * 60}\n"

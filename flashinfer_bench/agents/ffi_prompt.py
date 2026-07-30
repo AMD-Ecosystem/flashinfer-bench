@@ -10,8 +10,10 @@ mind when writing the host function and device kernel:
   `cuda_runtime.h` / `cudaMalloc` / cuBLAS-style code compiles), but prefer HIP idioms directly for
   clarity: `#include <hip/hip_runtime.h>`, `hipStream_t`, `hipGetErrorString`, `hipLaunchKernelGGL`
   or `<<<>>>`.
-- DLPack device type for AMD GPUs is still `kDLCUDA` (2) and PyTorch uses `device="cuda"`. The
-  tvm-ffi environment stream is a HIP stream (aliased as `cudaStream_t` under HIP).
+- PyTorch still uses `device="cuda"` on ROCm, but **DLPack does not follow that aliasing**: a ROCm
+  tensor reports device type `kDLROCM` (10), not `kDLCUDA` (2). If you branch on `device_type`,
+  accept both so the kernel works on either backend. The tvm-ffi environment stream is a HIP
+  stream (aliased as `cudaStream_t` under HIP).
 - Wavefront size is 64 on CDNA (not 32). Size block dims, reductions, and shuffles for 64-lane
   wavefronts; use `__launch_bounds__` to control occupancy. LDS is 64 KB/CU on gfx942.
 - Avoid NVIDIA-only constructs: PTX inline asm, warp-sync-mask intrinsics (`__shfl_sync`), and

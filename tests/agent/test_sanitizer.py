@@ -135,6 +135,28 @@ def test_run_sanitizer_reports_run_failure_as_error():
     assert "MEMCHECK: FAIL" not in out
 
 
+def test_run_sanitizer_error_path_honours_max_lines():
+    """The ERROR short-circuit must still respect max_lines and keep its "ERROR:" prefix.
+
+    That error embeds the runner's full stdout/stderr, so an unbounded return can swamp an
+    agent's context — the same gap that was fixed on the rocprof side.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        solution, workload = _make_dataset(Path(d))
+        out = flashinfer_bench_run_sanitizer(
+            solution,
+            workload,
+            device="cuda:999",  # always fails -> ERROR path
+            trace_set_path=d,
+            sanitizer_types=["memcheck"],
+            max_lines=3,
+        )
+
+    assert out.startswith("ERROR:")
+    # 1 header line + at most 3 body lines + at most 1 "[... N more lines]" marker.
+    assert len(out.split("\n")) <= 5
+
+
 @pytest.mark.requires_torch_cuda
 def test_run_sanitizer_memcheck_runs():
     with tempfile.TemporaryDirectory() as d:
