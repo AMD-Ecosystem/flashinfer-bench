@@ -75,6 +75,9 @@ def test_run_sanitizer_invalid_type():
         )
     assert out.startswith("ERROR:")
     assert "Invalid sanitizer type" in out
+    # Stable, sorted listing — a bare set repr reorders per process (hash randomization).
+    assert "memcheck, racecheck, initcheck, synccheck" not in out
+    assert "initcheck, memcheck, racecheck, synccheck" in out
 
 
 def test_run_sanitizer_unsupported_types_degrade():

@@ -135,7 +135,10 @@ def flashinfer_bench_run_sanitizer(
         sanitizer_types = ["memcheck"]
     for st in sanitizer_types:
         if st not in VALID_SANITIZER_TYPES:
-            return f"ERROR: Invalid sanitizer type '{st}'. Must be one of: {VALID_SANITIZER_TYPES}"
+            # sorted(): a bare set repr reorders per process (string hash randomization), which
+            # makes this message unstable for agents that parse or diff tool output.
+            valid = ", ".join(sorted(VALID_SANITIZER_TYPES))
+            return f"ERROR: Invalid sanitizer type '{st}'. Must be one of: {valid}"
 
     if isinstance(solution, str):
         p = Path(solution)

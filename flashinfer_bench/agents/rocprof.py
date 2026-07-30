@@ -105,6 +105,16 @@ def _read_csv(pattern: str) -> List[dict]:
     return rows
 
 
+def _truncate(text: str, max_lines: Optional[int]) -> str:
+    """Cap ``text`` at ``max_lines`` lines, noting how many were dropped. None means no limit."""
+    if max_lines is None:
+        return text
+    parts = text.split("\n")
+    if len(parts) <= max_lines:
+        return text
+    return "\n".join(parts[:max_lines]) + f"\n[... {len(parts) - max_lines} more lines]"
+
+
 def _region_window(out_dir: Path) -> Optional[tuple]:
     """Return (start_ns, end_ns) of the profiled roctx region, or None if not found."""
     rows = _read_csv(str(out_dir / "**" / "*marker_api_trace*.csv"))
@@ -178,12 +188,7 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
     if pmc:
         lines += ["", f"Hardware counters ({len(pmc)} rows) — see counter_collection CSV."]
 
-    out = "\n".join(lines)
-    if max_lines is not None:
-        parts = out.split("\n")
-        if len(parts) > max_lines:
-            out = "\n".join(parts[:max_lines]) + f"\n[... {len(parts) - max_lines} more lines]"
-    return out
+    return _truncate("\n".join(lines), max_lines)
 
 
 def flashinfer_bench_run_rocprof(
@@ -291,9 +296,9 @@ def flashinfer_bench_run_rocprof(
             return f"ERROR: failed to launch rocprofv3: {e}"
 
         if result.returncode != 0:
-            return (
-                f"ERROR: rocprofv3 exited with code {result.returncode}:\n"
-                f"{result.stdout}\n{result.stderr}"
-            )
+            # A failing rocprofv3 can emit a very large stdout/stderr, so honour max_lines here
+            # too. Only the payload is truncated — the "ERROR:" prefix must survive any limit.
+            detail = _truncate(f"{result.stdout}\n{result.stderr}", max_lines)
+            return f"ERROR: rocprofv3 exited with code {result.returncode}:\n{detail}"
 
         return _format_kernel_report(out_dir, max_lines)
