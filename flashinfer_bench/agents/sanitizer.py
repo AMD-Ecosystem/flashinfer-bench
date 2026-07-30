@@ -37,6 +37,32 @@ _MEM_FAULT_SIGNATURES = (
 )
 
 
+def _xnack_status(run_env) -> str:
+    """Describe the fault-detection actually in effect, so a clean verdict can be read correctly.
+
+    A "no fault detected" result means much less on an ``xnack-`` target, where page-fault-based
+    detection is unavailable no matter what ``HSA_XNACK`` is set to.
+    """
+    value = run_env.get("HSA_XNACK", "<unset>")
+    arch = ""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            arch = torch.cuda.get_device_properties(0).gcnArchName
+    except Exception:  # torch missing, no device, or a driver hiccup — arch is a nice-to-have
+        pass
+
+    if "xnack-" in arch:
+        return (
+            f"HSA_XNACK={value}, but the device target is {arch}: page-fault-based detection is "
+            "NOT active, so only faults that abort the process were catchable."
+        )
+    if arch:
+        return f"HSA_XNACK={value}, device target {arch}."
+    return f"HSA_XNACK={value} (device target undetermined)."
+
+
 def _truncate_output(output: str, max_lines: int) -> str:
     lines = output.split("\n")
     if len(lines) <= max_lines:
@@ -60,8 +86,11 @@ def _run_memcheck(
     ]
     if trace_set_path:
         cmd += ["--trace-set-path", str(trace_set_path)]
-    # HSA_XNACK=1 enables page-fault-based detection of out-of-bounds device accesses where the
-    # hardware/driver supports it (surfaces faults instead of silently reading garbage).
+    # HSA_XNACK=1 asks for page-fault-based detection of out-of-bounds device accesses (surfacing
+    # faults instead of silently reading garbage). setdefault, NOT a forced assignment: code
+    # objects on CDNA are built per xnack variant (e.g. gfx942:xnack-), so overriding an explicit
+    # caller setting can mismatch the target. The verdict reports what was actually in effect
+    # instead — see _xnack_status.
     run_env = dict(env)
     run_env.setdefault("HSA_XNACK", "1")
     try:
@@ -86,6 +115,7 @@ def _run_memcheck(
         )
     return combined + (
         "\nMEMCHECK: no GPU memory fault detected.\n"
+        f"DETECTION: {_xnack_status(run_env)}\n"
         "NOTE: ROCm has no full compute-sanitizer equivalent; this only catches faults that abort "
         "the process (illegal address / page fault). It does NOT detect benign OOB reads, "
         "uninitialized memory, or races. For deeper checks, build the kernel with ROCm's LLVM "

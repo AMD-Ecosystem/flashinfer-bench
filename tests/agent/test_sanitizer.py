@@ -167,3 +167,7 @@ def test_run_sanitizer_memcheck_runs():
     assert not out.startswith("ERROR:")
     # A correct kernel should not trip the fault detector.
     assert "MEMCHECK: no GPU memory fault" in out
+    # The clean verdict must state what detection was actually in effect: on an xnack- target
+    # page-fault detection is unavailable, so "no fault" is much weaker than it sounds.
+    assert "DETECTION:" in out
+    assert "HSA_XNACK=" in out
