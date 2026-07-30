@@ -15,8 +15,8 @@ recommendation, and ask for the user's input before assuming a direction.
 - **Well-tested code is non-negotiable** — err toward too many tests, not too few.
 - Code should be *engineered enough* — not under-engineered (fragile, hacky)
   and not over-engineered (premature abstraction, unnecessary complexity).
-- Err on the side of **readable code** over edge cases, but never thoughtlessness
-  or speed.
+- Err on the side of **readable code** over exhaustive edge-case handling — but
+  never trade thoughtfulness for speed.
 
 ## Review stages
 
@@ -45,9 +45,10 @@ recommendation, and ask for the user's input before assuming a direction.
 
 ### 4. Performance review
 
-- N+1 queries and database access patterns.
-- Memory usage concerns.
-- Caching opportunities.
+- Redundant work in hot paths — repeated allocations, host/device syncs,
+  recomputed values.
+- Memory usage concerns: device memory footprint, unnecessary host↔device copies.
+- Caching opportunities (JIT/build artifacts, precomputed metadata).
 - Slow or high-complexity code paths.
 
 ## Per-issue format
