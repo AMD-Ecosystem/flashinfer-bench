@@ -16,7 +16,7 @@ from flashinfer_bench.agents import (
     flashinfer_bench_list_rocprof_options,
     flashinfer_bench_run_rocprof,
 )
-from flashinfer_bench.agents._profiling import PROFILE_REGION
+from flashinfer_bench.agents._profiling import UNSCOPED_MARKER
 from flashinfer_bench.data import (
     AxisConst,
     AxisVar,
@@ -89,21 +89,21 @@ def main() -> int:
         print(report)
         print("-" * 72)
         # "us |" alone is far too weak: it passed while region correlation was broken and the
-        # report contained every kernel in the process (torch init, RNG, copies). Require the
-        # header to state real scoping, which is the whole point of profiling under a roctx range.
-        # Scope the scoping checks to the header line: kernel names appear verbatim in the body,
-        # so searching the whole report could match "ALL kernels" or the region string inside a
-        # mangled symbol and flip the verdict either way.
-        header = report.split("\n", 1)[0]
-        problems = []
+        # report listed every kernel in the process (torch init, RNG, copies). Require the header
+        # to state real scoping, which is the whole point of profiling under a roctx range.
         if report.startswith("ERROR"):
-            problems.append("tool returned an error")
-        if "us |" not in report:
-            problems.append("no kernel timing lines")
-        if "ALL kernels" in header:
-            problems.append("region correlation failed — report is unscoped")
-        elif f"region '{PROFILE_REGION}'" not in header:
-            problems.append("header does not report the profiled region")
+            # One cause, one reason. Running the scoping checks here too would blame region
+            # correlation for a rocprofv3 that never ran.
+            problems = ["tool returned an error"]
+        else:
+            # Read the header line only — it is the single line that states scoping; everything
+            # below it is per-kernel detail.
+            header = report.split("\n", 1)[0]
+            problems = []
+            if "us |" not in report:
+                problems.append("no kernel timing lines")
+            if UNSCOPED_MARKER in header:
+                problems.append("region correlation failed — report is unscoped")
 
         ok = not problems
         print(

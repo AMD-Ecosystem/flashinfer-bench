@@ -1,8 +1,13 @@
 """rocprofv3-based profiling tool for LLM agents (ROCm replacement for NCU).
 
-Runs a solution under ``rocprofv3`` and reports per-kernel device-side timing and occupancy-relevant
-resource usage (VGPR/SGPR/LDS/scratch, grid/block), scoped to the profiled region marked by the
-runner's roctx range. Optionally collects hardware performance counters via ``--pmc``.
+Runs a solution under ``rocprofv3`` and reports per-kernel device-side timing plus launch geometry
+(work-items and workgroup size), scoped to the profiled region marked by the runner's roctx range.
+Optionally collects hardware performance counters via ``--pmc``.
+
+Occupancy resources (VGPR/SGPR/LDS/scratch) are reported when the profiler emits them: ROCm 7.x
+kernel traces carry those columns, ROCm 6.4.x does not (it has Private_Segment_Size /
+Group_Segment_Size and no register counts), so on older ROCm those fields read "?" and the report
+says so once rather than per line.
 
 All inputs/outputs are JSON-serializable, so this is usable as an LLM agent tool (mirrors the
 contract of the former NCU tool). Errors are returned as strings starting with "ERROR:".
@@ -24,7 +29,7 @@ from typing import List, Optional, Union
 from flashinfer_bench.data import Solution, TraceSet, Workload
 
 from ._output import truncate
-from ._profiling import PROFILE_REGION
+from ._profiling import PROFILE_REGION, UNSCOPED_MARKER
 
 logger = logging.getLogger(__name__)
 
@@ -114,20 +119,28 @@ _MARKER_NAME_COLUMNS = ("Function", "Name")
 
 def _region_window(out_dir: Path) -> Optional[tuple]:
     """Return (start_ns, end_ns) of the profiled roctx region, or None if not found."""
-    rows = _read_csv(str(out_dir / "**" / "*marker_api_trace*.csv"))
-    for r in rows:
+    spans = []
+    for r in _read_csv(str(out_dir / "**" / "*marker_api_trace*.csv")):
         # Search every candidate column, rather than taking the first populated one: a build
         # that emits both (say "Function" holding the API name "roctxRangePushA" and the message
         # in "Name") would otherwise match the wrong column and silently lose scoping again.
-        if any(PROFILE_REGION in (r.get(c) or "") for c in _MARKER_NAME_COLUMNS):
-            try:
-                return int(r["Start_Timestamp"]), int(r["End_Timestamp"])
-            except (KeyError, TypeError, ValueError):
-                # Multi-process runs emit several marker CSVs (all merged by _read_csv), so a
-                # malformed row is not the last word — keep scanning for a usable one rather
-                # than silently giving up on region scoping.
-                continue
-    return None
+        if not any(PROFILE_REGION in (r.get(c) or "") for c in _MARKER_NAME_COLUMNS):
+            continue
+        try:
+            spans.append((int(r["Start_Timestamp"]), int(r["End_Timestamp"])))
+        except (KeyError, TypeError, ValueError):
+            # Multi-process runs emit several marker CSVs (all merged by _read_csv), so a
+            # malformed row is not the last word — keep scanning for a usable one rather
+            # than silently giving up on region scoping.
+            continue
+
+    if not spans:
+        return None
+    # Span the widest extent rather than trusting the first match. _read_csv merges every marker
+    # CSV, so several rows can carry the message: a second process's range, or an instantaneous
+    # roctxMark-style record whose start == end. Taking the first would hand back a window that
+    # contains no dispatch, and the report would silently fall back to every kernel again.
+    return min(s for s, _ in spans), max(e for _, e in spans)
 
 
 def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
@@ -155,24 +168,28 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
         )
 
     window = _region_window(out_dir)
-    selected = (
+    all_kernels = [(r, end - start) for r, start, end in parsed]
+    in_region = (
         [(r, end - start) for r, start, end in parsed if window[0] <= start and end <= window[1]]
         if window is not None
         else []
     )
 
-    # Scoping can fail two ways: no marker row matched (window is None), or the window matched no
-    # dispatch. Both fall back to every kernel in the trace, which then includes the runner's
-    # warmup dispatch and any JIT/setup work. Say so in the header — an unscoped report that
-    # claims to be scoped sends agents optimizing kernels the solution never ran.
-    if window is None:
-        scope = f"ALL kernels — region '{PROFILE_REGION}' not found in the marker trace"
-    elif not selected:
-        scope = f"ALL kernels — region '{PROFILE_REGION}' matched no dispatch"
+    # Assign scope and selection together. Scoping can fail two ways — no marker row matched, or
+    # the window matched no dispatch — and both fall back to every kernel in the trace, which then
+    # includes the runner's warmup dispatch and any JIT/setup work. An unscoped report that claims
+    # to be scoped sends agents optimizing kernels the solution never ran, so the header has to say
+    # which happened. Deriving both in one branch keeps them from drifting apart: computing the
+    # label and then mutating the selection underneath it is how the header starts lying again.
+    if in_region:
+        selected, scope = (
+            in_region,
+            f"region '{PROFILE_REGION}' ({len(in_region)} of {len(all_kernels)})",
+        )
     else:
-        scope = f"region '{PROFILE_REGION}'"
-    if not selected:
-        selected = [(r, end - start) for r, start, end in parsed]
+        why = "not found in the marker trace" if window is None else "matched no dispatch"
+        selected = all_kernels
+        scope = f"{UNSCOPED_MARKER} — region '{PROFILE_REGION}' {why}"
 
     selected.sort(key=lambda x: x[1], reverse=True)
     lines = [
@@ -180,21 +197,41 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
         f"{len(selected)} kernel dispatch(es), sorted by duration):",
         "",
     ]
+
+    # csv.DictReader fills missing trailing fields with None (short/partially-flushed rows, or a
+    # merged per-process CSV with a different column count), and f"{None:>4}" raises TypeError —
+    # which would escape as a traceback and break the "errors come back as ERROR: strings"
+    # contract. Coerce through this rather than trusting .get()'s default.
+    def field(row: dict, key: str) -> str:
+        value = row.get(key)
+        return "?" if value is None or value == "" else str(value)
+
     for r, dur_ns in selected:
         name = (r.get("Kernel_Name") or "?").strip('"')
         if len(name) > 80:
             name = name[:77] + "..."
         lines.append(
-            f"  {dur_ns / 1000.0:9.3f} us | VGPR {r.get('VGPR_Count','?'):>4} "
-            f"SGPR {r.get('SGPR_Count','?'):>4} LDS {r.get('LDS_Block_Size','?'):>6} "
-            f"scratch {r.get('Scratch_Size','?'):>6} | "
+            f"  {dur_ns / 1000.0:9.3f} us | VGPR {field(r, 'VGPR_Count'):>4} "
+            f"SGPR {field(r, 'SGPR_Count'):>4} LDS {field(r, 'LDS_Block_Size'):>6} "
+            f"scratch {field(r, 'Scratch_Size'):>6} | "
             # Grid_Size_* is a work-item count (HSA semantics), NOT CUDA gridDim. Labelling it
             # "grid" beside "block" would read as workgroups and overstate the launch by the
             # workgroup size, so say "items" explicitly.
-            f"items {r.get('Grid_Size_X','?')}x{r.get('Grid_Size_Y','?')}x{r.get('Grid_Size_Z','?')} "
-            f"wg {r.get('Workgroup_Size_X','?')}x{r.get('Workgroup_Size_Y','?')}x{r.get('Workgroup_Size_Z','?')}"
+            f"items {field(r, 'Grid_Size_X')}x{field(r, 'Grid_Size_Y')}x{field(r, 'Grid_Size_Z')} "
+            f"wg {field(r, 'Workgroup_Size_X')}x{field(r, 'Workgroup_Size_Y')}"
+            f"x{field(r, 'Workgroup_Size_Z')}"
         )
         lines.append(f"    {name}")
+
+    # Say once why the occupancy fields are blank, instead of leaving N lines of bare "?" that read
+    # as "this kernel has no registers" rather than "this profiler build does not report them".
+    if selected and not any(k in selected[0][0] for k in ("VGPR_Count", "LDS_Block_Size")):
+        lines += [
+            "",
+            "NOTE: this rocprofv3 build's kernel trace carries no occupancy columns "
+            "(ROCm 6.4.x exposes Private_Segment_Size/Group_Segment_Size and no register counts), "
+            "so VGPR/SGPR/LDS/scratch read '?'. ROCm 7.x reports them.",
+        ]
 
     # Note whether counters (PMC) were collected. Only the row count is reported — a full counter
     # dump would dwarf the kernel report, so the values stay in the CSV on disk.
