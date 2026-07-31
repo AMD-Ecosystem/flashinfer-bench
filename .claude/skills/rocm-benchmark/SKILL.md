@@ -21,7 +21,7 @@ against the known-good path with `torch.testing.assert_close(rtol=1e-2, atol=1e-
 | Method | When | How |
 |---|---|---|
 | **torch / HIP events** (default) | Any kernel ≳ 50 µs; the zero-dep default | `torch.cuda.Event(enable_timing=True)` → HIP events on ROCm. In this repo, `bench/timing.py` wraps this with warmup, cold-L2 flush, and median-over-iters; selected by `FIB_TIMING_BACKEND=torch_events` (default). |
-| **rocprofv3 CLI** | Anything you intend to optimize; device-side accuracy | `rocprofv3 --stats --kernel-trace -- python script.py` for per-kernel `Start/End_Timestamp` (+ VGPR/SGPR/LDS/grid); `-i pmc.txt` for a custom counter set. In this repo this is the reserved `FIB_TIMING_BACKEND=rocprof` backend. |
+| **rocprofv3 CLI** | Anything you intend to optimize; device-side accuracy | `rocprofv3 --stats --kernel-trace -- python script.py` for per-kernel `Start/End_Timestamp` (plus `VGPR_Count`/`SGPR_Count`/`LDS_Block_Size`/`Scratch_Size` on ROCm 7.x — 6.4.x emits neither, only `Private_Segment_Size`/`Group_Segment_Size`); `-i pmc.txt` for a custom counter set. In this repo this is the reserved `FIB_TIMING_BACKEND=rocprof` backend. |
 | **omnitrace / rocprof-compute (Omniperf)** | Host+device timeline; roofline/occupancy sections when Python overhead is suspect | Installed separately; scope with a roctx range. |
 
 CUPTI is NVIDIA-only — there is no CUPTI path on ROCm (the old
@@ -74,8 +74,28 @@ Useful counter groupings when profiling a CDNA kernel:
 | stall | `SQ_WAIT_INST_VMEM`, `SQ_WAIT_INST_LDS` | memory-stall diagnosis |
 
 Scope a region with a roctx range (the bench runner emits one via `torch.cuda.nvtx.range`, which maps
-to roctx on ROCm) and filter with `rocprofv3 --marker-trace --kernel-rename`. Porting the profiling
-agent (`agents/ncu.py`) to rocprofv3 + rocprof-compute is tracked in `ROCM_PORT_PLAN.md` §3.10.
+to roctx on ROCm) and filter with `rocprofv3 --marker-trace`.
+
+### The rocprofv3 agent tool
+
+`flashinfer_bench_run_rocprof` (`agents/rocprof.py`) already does this for you — it runs the solution
+under `rocprofv3 --marker-trace --kernel-trace`, correlates against the runner's roctx range, and
+returns a per-kernel report. Reading its output:
+
+- The header states the scope, and you must read it. `region 'flashinfer_bench_profile' (9 of 20)`
+  means 9 of 20 traced dispatches fell inside the marked region. A header starting `ALL kernels`
+  means correlation **failed** and the report covers the whole process — torch init, RNG, JIT and
+  the runner's warmup dispatch, which typically sorts to the top by duration. Do not optimize
+  against an `ALL kernels` report; the slowest entry is probably setup.
+- `items NxNxN wg NxNxN` is work-items then workgroup size. `items` is **not** CUDA `gridDim` —
+  rocprofv3's `Grid_Size_*` is a work-item count under HSA, so workgroups = items / wg.
+- `VGPR/SGPR/LDS/scratch` come from the kernel trace on ROCm 7.x. ROCm 6.4.x does not emit those
+  columns (it has `Private_Segment_Size`/`Group_Segment_Size` and no register counts), so they read
+  `?` and the report says so once at the end.
+
+The marker message lives in the `Function` column of `marker_api_trace.csv`, not `Name` — assuming
+otherwise is what silently disabled region scoping until it was caught against real profiler output.
+`docker/rocm/validate_rocprof.py` is the end-to-end check and runs in the GPU CI job.
 
 **Troubleshooting:** empty counter CSV usually means the kernel-name regex didn't match the mangled
 name — run `rocprofv3 --stats --kernel-trace` first and copy the prefix. Confirm `which rocprofv3`

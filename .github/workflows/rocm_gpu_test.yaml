@@ -57,6 +57,10 @@ jobs:
               set -e
               python3 -m pip install -e /workspace --no-deps -q
               python3 docker/rocm/validate_p0.py
+              # The only check that exercises real rocprofv3 output. The unit tests cannot cover
+              # this: their CSV fixtures are hand-written, so they agree with whatever schema the
+              # code assumes — which is exactly how region correlation stayed broken unnoticed.
+              python3 docker/rocm/validate_rocprof.py
               python3 -m pytest tests/compile tests/agent tests/integration/test_aiter_generator.py \
                 -q --reruns 2 -m "not slow"
             '

@@ -8,7 +8,13 @@ the device rather than failing. Hence one constant instead of a literal per call
 
 from __future__ import annotations
 
-__all__ = ["PROFILE_REGION"]
+__all__ = ["PROFILE_REGION", "UNSCOPED_MARKER"]
 
 #: Tool-agnostic: read by the rocprofv3 (roctx) tool as well as the NCU (NVTX) one.
 PROFILE_REGION = "flashinfer_bench_profile"
+
+#: Leads the report header when region correlation failed and the profile covers every kernel in
+#: the process rather than just the profiled region. Shared for the same reason as PROFILE_REGION:
+#: the report writer, the container validation script and the tests all key off this exact string,
+#: so a reworded literal would silently stop being detected — the failure it exists to announce.
+UNSCOPED_MARKER = "ALL kernels"

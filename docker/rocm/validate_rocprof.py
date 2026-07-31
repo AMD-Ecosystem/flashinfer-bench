@@ -16,6 +16,7 @@ from flashinfer_bench.agents import (
     flashinfer_bench_list_rocprof_options,
     flashinfer_bench_run_rocprof,
 )
+from flashinfer_bench.agents._profiling import UNSCOPED_MARKER
 from flashinfer_bench.data import (
     AxisConst,
     AxisVar,
@@ -87,8 +88,32 @@ def main() -> int:
         print("-" * 72)
         print(report)
         print("-" * 72)
-        ok = (not report.startswith("ERROR")) and ("us |" in report)
-        print("RESULT:", "PASS — rocprofv3 profiled kernels" if ok else "FAIL")
+        # "us |" alone is far too weak: it passed while region correlation was broken and the
+        # report listed every kernel in the process (torch init, RNG, copies). Require the header
+        # to state real scoping, which is the whole point of profiling under a roctx range.
+        if report.startswith("ERROR"):
+            # One cause, one reason. Running the scoping checks here too would blame region
+            # correlation for a rocprofv3 that never ran.
+            problems = ["tool returned an error"]
+        else:
+            # Read the header line only — it is the single line that states scoping; everything
+            # below it is per-kernel detail.
+            header = report.split("\n", 1)[0]
+            problems = []
+            if "us |" not in report:
+                problems.append("no kernel timing lines")
+            if UNSCOPED_MARKER in header:
+                problems.append("region correlation failed — report is unscoped")
+
+        ok = not problems
+        print(
+            "RESULT:",
+            (
+                "PASS — rocprofv3 profiled kernels, scoped to the region"
+                if ok
+                else "FAIL — " + "; ".join(problems)
+            ),
+        )
         return 0 if ok else 1
 
 

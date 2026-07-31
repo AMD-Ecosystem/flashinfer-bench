@@ -104,7 +104,10 @@ profile = "black"
 line_length = 100
 
 [tool.ruff]
-include = ["flashinfer_bench/**/*.py", "tests/**/*.py"]
+# docker/ is real, package-importing Python (the validate_*.py scripts) that was previously
+# unlinted, so `ruff check .` could not see files this repo ships and runs. scripts/ is left out
+# for now: it carries 14 pre-existing violations and cleaning it belongs in its own change.
+include = ["flashinfer_bench/**/*.py", "tests/**/*.py", "docker/**/*.py"]
 line-length = 100
 target-version = "py310"
 
