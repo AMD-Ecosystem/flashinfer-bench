@@ -95,7 +95,7 @@ def test_format_kernel_report_no_output(tmp_path):
     assert _format_kernel_report(tmp_path, max_lines=None).startswith("ERROR:")
 
 
-def test_region_window_skips_malformed_marker_rows(tmp_path):
+def test_region_spans_skip_malformed_marker_rows(tmp_path):
     """A malformed marker row must not disable region scoping when a valid one follows.
 
     Merging every marker CSV makes multiple region rows likely on multi-process runs, so
@@ -123,8 +123,8 @@ def test_region_scoping_works_against_real_rocprofv3_schema(tmp_path):
     """The regression test for the bug this file's fixtures used to hide.
 
     Captured verbatim from ROCm 7.2 in the docker/rocm container: the roctx message is in the
-    "Function" column and there is no "Name" column at all. Reading "Name" made _region_window
-    return None on every real run, so the report silently widened to every kernel on the device
+    "Function" column and there is no "Name" column at all. Reading "Name" made region correlation
+    match nothing on every real run, so the report silently widened to every kernel on the device
     while still advertising the region.
     """
     (tmp_path / "marker_api_trace.csv").write_text(
