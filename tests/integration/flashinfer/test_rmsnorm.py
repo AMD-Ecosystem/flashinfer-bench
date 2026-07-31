@@ -24,9 +24,9 @@ from flashinfer_bench.data import (
     Workload,
 )
 
-# `flashinfer` here is amd-flashinfer on ROCm; it is an optional extra, not a hard
-# dependency, so skip these integration tests wherever it is not installed.
-pytest.importorskip("flashinfer", reason="flashinfer (amd-flashinfer on ROCm) not installed")
+# These modules call into `flashinfer` (amd-flashinfer on ROCm), an optional extra rather
+# than a hard dependency. tests/conftest.py skips the marker when it is not importable.
+pytestmark = pytest.mark.requires_flashinfer
 
 
 def test_rmsnorm_adapter_substitution(tmp_path, monkeypatch):

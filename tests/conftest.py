@@ -1,3 +1,4 @@
+import importlib.util
 from pathlib import Path
 from typing import List
 
@@ -20,15 +21,43 @@ def _torch_cuda_available() -> bool:
         return False
 
 
+def _flashinfer_available() -> bool:
+    """Check if the ``flashinfer`` package is importable.
+
+    On ROCm this is ``amd-flashinfer``, which imports under the same name. It is an optional
+    extra rather than a hard dependency, so it is absent on CPU-only environments such as CI.
+
+    Returns
+    -------
+    bool
+        True if ``flashinfer`` can be imported, False otherwise.
+    """
+    try:
+        return importlib.util.find_spec("flashinfer") is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: List[pytest.Item]) -> None:
-    """Modify pytest collection to skip tests that require CUDA when CUDA is not available."""
-    if _torch_cuda_available():
+    """Skip tests whose environment prerequisites (CUDA, flashinfer) are unavailable."""
+    skip_cuda = (
+        None
+        if _torch_cuda_available()
+        else pytest.mark.skip(reason="CUDA not available from PyTorch, skip test")
+    )
+    skip_flashinfer = (
+        None
+        if _flashinfer_available()
+        else pytest.mark.skip(reason="flashinfer (amd-flashinfer on ROCm) not installed")
+    )
+    if skip_cuda is None and skip_flashinfer is None:
         return
 
-    skip_cuda = pytest.mark.skip(reason="CUDA not available from PyTorch, skip test")
     for item in items:
-        if any(item.iter_markers(name="requires_torch_cuda")):
+        if skip_cuda is not None and any(item.iter_markers(name="requires_torch_cuda")):
             item.add_marker(skip_cuda)
+        if skip_flashinfer is not None and any(item.iter_markers(name="requires_flashinfer")):
+            item.add_marker(skip_flashinfer)
 
 
 @pytest.fixture

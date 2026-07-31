@@ -32,7 +32,11 @@ dependencies = [
   # NOTE: the ROCm FlashInfer package (`amd-flashinfer`, imported as `flashinfer`) is only needed
   # for the flashinfer integration/apply path and lives on AMD's package index, so it is an
   # optional dependency under the `rocm` extra rather than a hard requirement.
-  "apache-tvm-ffi>=0.1.2",
+  # Range restored from what `flashinfer-python` used to impose transitively
+  # (!=0.1.8,!=0.1.8.post0,<0.2,>=0.1.6); dropping that dep silently left us on a bare >=0.1.2.
+  # The floor additionally matters on ROCm: HIP-backend auto-detection landed after 0.1.2 and
+  # docker/rocm/Dockerfile pins 0.1.12, so an older tvm-ffi compiles .cu via nvcc instead of hipcc.
+  "apache-tvm-ffi>=0.1.6,<0.2,!=0.1.8,!=0.1.8.post0",
   "docstring-parser>=0.16",
   "pyyaml>=6.0",
   # Imported unconditionally by flashinfer_bench.compile.registry. Reaches us transitively via
@@ -124,7 +128,10 @@ strict = true
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-rA --durations=0 --ignore=3rdparty"
-markers = ["requires_torch_cuda: tests that require torch and CUDA available"]
+markers = [
+  "requires_torch_cuda: tests that require torch and CUDA available",
+  "requires_flashinfer: tests that require the flashinfer package (amd-flashinfer on ROCm)",
+]
 log_cli = true
 log_cli_level = "INFO"
 

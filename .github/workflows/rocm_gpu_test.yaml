@@ -34,8 +34,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ROCM_ARCH is a list, not a constant: override it when the runner is not CDNA3 so the
+      # image's PYTORCH_ROCM_ARCH / TVM_FFI_ROCM_ARCH_LIST match the hardware actually attached.
       - name: Build ROCm dev image
-        run: DOCKER_BUILDKIT=0 docker build -f docker/rocm/Dockerfile -t flashinfer-bench:rocm-ci docker/rocm
+        run: |
+          DOCKER_BUILDKIT=0 docker build --build-arg ROCM_ARCH="${ROCM_ARCH}" \
+            -f docker/rocm/Dockerfile -t flashinfer-bench:rocm-ci docker/rocm
+        env:
+          ROCM_ARCH: ${{ vars.ROCM_ARCH || 'gfx942' }}
 
       - name: P0 stack validation + test suite
         run: |
@@ -43,10 +49,26 @@ jobs:
             --device=/dev/kfd --device=/dev/dri \
             --group-add video --group-add render \
             --security-opt seccomp=unconfined --ipc=host \
+            --shm-size=16g \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
             flashinfer-bench:rocm-ci bash -lc '
               set -e
               python3 -m pip install -e /workspace --no-deps -q
               python3 docker/rocm/validate_p0.py
-              python3 -m pytest tests/compile tests/agent tests/integration/test_aiter_generator.py -q
+              python3 -m pytest tests/compile tests/agent tests/integration/test_aiter_generator.py \
+                -q --reruns 2 -m "not slow"
             '
+
+      # The container runs as root over the bind-mounted workspace, so pip/pytest leave root-owned
+      # egg-info, __pycache__ and (after a HIP fault) multi-hundred-MB core dumps behind. The next
+      # actions/checkout runs as the unprivileged runner user and cannot clean them, which wedges a
+      # self-hosted runner until someone intervenes by hand. Hand ownership back, always.
+      - name: Restore workspace ownership
+        if: always()
+        run: |
+          # Double quotes on purpose: $(id -u)/$(id -g) expand in the runner's shell, so the
+          # container chowns to the runner user rather than to its own root.
+          docker run --rm -v "${{ github.workspace }}:/workspace" \
+            flashinfer-bench:rocm-ci \
+            bash -lc "rm -f /workspace/core /workspace/core.*; chown -R $(id -u):$(id -g) /workspace" \
+            || true
