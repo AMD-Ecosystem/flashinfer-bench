@@ -59,11 +59,14 @@ See `docker/rocm/README.md` for details. To install into an existing ROCm enviro
 #    Pin the version: unpinned, pip can prefer a newer CPU-only torch from PyPI over the ROCm
 #    wheel and silently break the install. 2.9.1 / ROCm 7.2 is what docker/rocm/Dockerfile pins.
 pip install "torch==2.9.1" -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2/
-# 2) flashinfer-bench + ROCm extras. The two AMD wheels are published under different, ROCm-version-
-#    specific index paths (mirrors docker/rocm/Dockerfile) — don't mix versions:
+# 2) flashinfer-bench + ROCm extras, installed from the fork clone above. Install from source, not
+#    by name: the `[rocm]` extra exists only in this fork, so `pip install "flashinfer-bench[rocm]"`
+#    would resolve upstream's NVIDIA package off PyPI and silently drop the extra.
+#    The two AMD wheels live under different, ROCm-version-specific index paths (mirroring
+#    docker/rocm/Dockerfile) — don't mix versions:
 #      amd-flashinfer (imports as `flashinfer`) -> rocm-7.2.0 index
 #      amd_aiter (AITER-backed solutions)       -> rocm-7.1.1 index
-pip install "flashinfer-bench[rocm]" \
+pip install -e ".[rocm]" \
     --extra-index-url https://pypi.amd.com/rocm-7.2.0/simple/ \
     --extra-index-url https://pypi.amd.com/rocm-7.1.1/simple/
 ```

@@ -35,6 +35,9 @@ dependencies = [
   "apache-tvm-ffi>=0.1.2",
   "docstring-parser>=0.16",
   "pyyaml>=6.0",
+  # Imported unconditionally by flashinfer_bench.compile.registry. Reaches us transitively via
+  # torch today, so the omission is currently masked — declare it rather than rely on that.
+  "filelock>=3.12",
 ]
 
 [project.urls]
