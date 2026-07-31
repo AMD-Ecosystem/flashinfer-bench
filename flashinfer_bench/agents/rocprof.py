@@ -24,7 +24,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 from flashinfer_bench.data import Solution, TraceSet, Workload
 
@@ -117,7 +117,7 @@ def _read_csv(pattern: str) -> List[dict]:
 _MARKER_NAME_COLUMNS = ("Function", "Name")
 
 
-def _region_spans(out_dir: Path) -> List[tuple]:
+def _region_spans(out_dir: Path) -> List[Tuple[int, int]]:
     """Return every (start_ns, end_ns) span carrying the profiled roctx region, in no order.
 
     A list rather than one window on purpose. ``_read_csv`` merges every marker CSV, so a
