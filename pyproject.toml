@@ -38,6 +38,12 @@ dependencies = [
   # Imported unconditionally by flashinfer_bench.compile.registry. Reaches us transitively via
   # torch today, so the omission is currently masked — declare it rather than rely on that.
   "filelock>=3.12",
+  # These two reached us only via `flashinfer-python`, which this fork drops. Neither is imported
+  # by name here, which is why the loss is easy to miss: `safetensors.torch` needs numpy to load
+  # workload blobs, and the JIT builders shell out to the `ninja` binary (hence the explicit
+  # install in docker/rocm/Dockerfile). Without them, blob loading and every C++/HIP build fail.
+  "numpy>=1.24",
+  "ninja>=1.11",
 ]
 
 [project.urls]
@@ -126,3 +132,21 @@ log_cli_level = "INFO"
 version_scheme = "python-simplified-semver"
 fallback_version = "0.0.0.dev0"
 local_scheme = "no-local-version"
+
+# `uv sync`/`uv lock` resolve every extra, including `rocm`, regardless of which extras are being
+# installed. The AMD wheels are not on PyPI, so without these entries resolution fails outright
+# ("amd-flashinfer was not found in the package registry") and CI dies before running any test.
+# `explicit = true` keeps these indexes from being consulted for any other package.
+[[tool.uv.index]]
+name = "amd-rocm-720"
+url = "https://pypi.amd.com/rocm-7.2.0/simple/"
+explicit = true
+
+[[tool.uv.index]]
+name = "amd-rocm-711"
+url = "https://pypi.amd.com/rocm-7.1.1/simple/"
+explicit = true
+
+[tool.uv.sources]
+amd-flashinfer = { index = "amd-rocm-720" }
+amd_aiter = { index = "amd-rocm-711" }

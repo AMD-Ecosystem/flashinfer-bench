@@ -24,6 +24,10 @@ from flashinfer_bench.data import (
     Workload,
 )
 
+# `flashinfer` here is amd-flashinfer on ROCm; it is an optional extra, not a hard
+# dependency, so skip these integration tests wherever it is not installed.
+pytest.importorskip("flashinfer", reason="flashinfer (amd-flashinfer on ROCm) not installed")
+
 
 @pytest.mark.skipif(torch.cuda.device_count() == 0, reason="CUDA devices not available")
 def test_gqa_paged_decode_adapter_substitution_ps1(tmp_path, monkeypatch):
