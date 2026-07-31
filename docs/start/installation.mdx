@@ -35,6 +35,10 @@ come from AMD's package indexes rather than PyPI.
 
 > ROCm support (the `docker/rocm/` container and the `[rocm]` extra) lives in the ROCm fork,
 > `AMD-Ecosystem/flashinfer-bench`, not in upstream `flashinfer-ai/flashinfer-bench`.
+>
+> **The `flashinfer-bench` package on PyPI is the upstream NVIDIA build.** It carries no ROCm
+> support and no `[rocm]` extra, so the "Python Package" and "Install from Source" sections above
+> are the wrong path on AMD — follow this section instead.
 
 ```bash
 # Clone the ROCm fork — not the upstream URL used in "Install from Source" above
