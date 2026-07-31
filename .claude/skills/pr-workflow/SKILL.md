@@ -177,7 +177,7 @@ before considering the PR done:
    conversation. This prohibition is scoped to threaded findings; step 6 covers the rest.
 
 6. **The suppressed findings from step 2** have no thread to reply to, so record their closure in a
-   single top-level comment scoped to just that batch. This is the **one** case where a top-level
+   single top-level comment scoped to just that batch, listing each finding and marking it *Fixed* (with commit SHA) or *Won't fix* (with rationale). This is the **one** case where a top-level
    comment is right.
 
    Steps 5 and 6 are complementary, not in tension. The rule is one closure per finding, in the only
