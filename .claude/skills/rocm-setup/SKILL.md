@@ -72,11 +72,17 @@ in `ROCM_PORT_PLAN.md`.
 
 ```bash
 python3 docker/rocm/validate_p0.py        # expect 8/8 on gfx942
+python3 docker/rocm/validate_rocprof.py   # rocprofv3 agent profiler, scoped to the roctx region
 python3 docker/rocm/validate_aiter_ops.py # AITER solutions through the real Benchmark loop
 ```
 
 `validate_p0.py` checks torch.cuda on device, a GPU matmul, `import flashinfer`/`aiter`/
 `flashinfer_bench`, tvm-ffi backend = `hip`, a tvm-ffi HIP kernel compile+run, and nvtx→roctx.
+
+`validate_rocprof.py` is the only check that exercises real `rocprofv3` output. Unit tests cannot
+substitute: their CSV fixtures are hand-written, so they agree with whatever schema the code
+assumes — which is how region correlation stayed broken while the suite was green. It fails if the
+report is not scoped to the roctx region.
 Any failure means the env isn't ready — fix before benchmarking.
 
 Quick manual sanity (anywhere with the env active):
