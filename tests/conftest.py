@@ -22,15 +22,21 @@ def _torch_cuda_available() -> bool:
 
 
 def _flashinfer_available() -> bool:
-    """Check if the ``flashinfer`` package is importable.
+    """Check whether the ``flashinfer`` package is installed.
 
     On ROCm this is ``amd-flashinfer``, which imports under the same name. It is an optional
     extra rather than a hard dependency, so it is absent on CPU-only environments such as CI.
 
+    This probes for the module spec rather than importing: importing flashinfer is expensive and
+    can touch the GPU, which is not something to do during collection. So this answers "is it
+    installed", not "does importing it succeed" — an installed-but-broken flashinfer reports True
+    and its tests fail rather than skip. That is deliberate: a broken install should be visible,
+    not silently skipped.
+
     Returns
     -------
     bool
-        True if ``flashinfer`` can be imported, False otherwise.
+        True if ``flashinfer`` is installed, False otherwise.
     """
     try:
         return importlib.util.find_spec("flashinfer") is not None

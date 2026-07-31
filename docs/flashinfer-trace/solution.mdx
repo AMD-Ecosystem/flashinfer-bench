@@ -48,19 +48,21 @@ This object details the build requirements and properties of the source code.
 
 ### Dependencies Handling
 
-> **Note:** The `dependencies` field is currently only for semantic purposes and is not enforced.
-The support for dependencies is coming soon.
+> **Note:** `dependencies` is declarative except for one case — the TVM-FFI builder inspects it for
+BLAS tokens, described below. Nothing else acts on it: no builder installs packages, and the
+environment-validation path in `DependencyManager` is not wired into any builder today.
 
-The `dependencies` field is an array of strings declaring third-party packages needed to build/run the solution. In particular, we're handling the third-party CUDA libs and Python packages:
+The `dependencies` field is an array of strings declaring third-party packages needed to build/run the solution:
 
-- C++/HIP: On ROCm the TVM-FFI builder recognizes BLAS dependencies and links hipBLAS/rocBLAS
-  (the CUDA name `cublas` is accepted and mapped to them); other names are ignored by the builder.
-  CUTLASS header injection is not available in this fork — the NVIDIA cutlass submodule was removed
-  in the ROCm port.
+- C++/HIP: The TVM-FFI builder recognizes the BLAS tokens `cublas`, `hipblas`, and `rocblas`, and
+  links hipBLAS/rocBLAS on ROCm — the CUDA name `cublas` is accepted and mapped to them. Any other
+  name is ignored by the builder. CUTLASS header injection is not available in this fork; the
+  NVIDIA cutlass submodule was removed in the ROCm port.
 
-- Python libs: You may list package specifiers, but we do not manage Python package installs currently. We only validate against the current environment. If a listed lib/version isn't satisfied, the build fails fast with a validation error.
+- Python libs: You may list package specifiers, but they are neither installed nor validated at
+  present, so an unsatisfied entry does not fail the build.
 
-  Example: `torch`, `triton >= 2.3` → the builder validates the current environment for these packages and versions.
+  Example: `torch`, `triton >= 2.3`.
 
 
 ## Destination Passing Style (DPS)
