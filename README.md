@@ -21,8 +21,8 @@ as the fallback when something breaks. Full detail lives in those skills; this i
 bash docker/rocm/run.sh
 
 # Inside the container, prove the stack works end-to-end on the GPU:
-python docker/rocm/validate_p0.py          # expect 8/8 PASS on gfx942
-python -c "import torch; assert torch.version.hip; \
+python3 docker/rocm/validate_p0.py          # expect 8/8 PASS on gfx942
+python3 -c "import torch; assert torch.version.hip; \
   p=torch.cuda.get_device_properties(0); print(p.name, p.gcnArchName)"
 ```
 
@@ -34,7 +34,7 @@ AITER is AMD's tuned op library — for covered op-types it gives you a fast sol
 
 ```bash
 # End-to-end proof across every AITER-covered op-type (build → time → correctness → speedup):
-python docker/rocm/validate_aiter_ops.py
+python3 docker/rocm/validate_aiter_ops.py
 ```
 
 Or generate an AITER solution for a specific dataset definition in Python:
@@ -58,7 +58,7 @@ this fork *consumes* that dataset; it isn't produced here.)
 ```bash
 # torch/HIP-event timing (default), under gpu-lock so the device is pinned:
 tools/gpu-lock --gpus 1 -- \
-  python -m flashinfer_bench run --local <trace_dir> --definitions <def> --save-results
+  python3 -m flashinfer_bench run --local <trace_dir> --definitions <def> --save-results
 ```
 
 The loop builds each solution, times it (median over iters, cold-L2 flush), checks correctness vs
@@ -69,7 +69,7 @@ For a high-fidelity pass use the `rocprofv3` backend and pin clocks:
 ```bash
 sudo rocm-smi --setperfdeterminism 1900
 FIB_TIMING_BACKEND=rocprof FIB_L2_FLUSH_MB=256 \
-  tools/gpu-lock --gpus 1 -- python -m flashinfer_bench run --local <trace_dir> --definitions <def>
+  tools/gpu-lock --gpus 1 -- python3 -m flashinfer_bench run --local <trace_dir> --definitions <def>
 sudo rocm-smi --resetclocks
 ```
 
@@ -80,7 +80,7 @@ arch/ROCm versions.
 
 ```bash
 AMD_SERIALIZE_KERNEL=3 HIP_LAUNCH_BLOCKING=1 \
-  python -m flashinfer_bench run --local <trace_dir> --definitions <def>
+  python3 -m flashinfer_bench run --local <trace_dir> --definitions <def>
 ```
 
 This localizes HIP faults to the offending kernel. See [`rocm-debug`](.claude/skills/rocm-debug/SKILL.md)

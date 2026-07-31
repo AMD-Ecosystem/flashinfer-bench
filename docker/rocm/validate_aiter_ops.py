@@ -4,7 +4,7 @@ For each op-type the generator supports, builds an in-memory definition + worklo
 generator for the AITER-backed solution, and runs it through the real Benchmark loop (build → time →
 correctness → speedup) on the GPU.
 
-Run inside the container:  python docker/rocm/validate_aiter_ops.py
+Run inside the container:  python3 docker/rocm/validate_aiter_ops.py
 """
 
 from __future__ import annotations

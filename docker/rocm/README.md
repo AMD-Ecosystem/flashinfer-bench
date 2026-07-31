@@ -33,7 +33,7 @@ docker build -f docker/rocm/Dockerfile -t flashinfer-bench:rocm docker/rocm
 bash docker/rocm/run.sh
 
 # One-off command
-bash docker/rocm/run.sh python docker/rocm/validate_p0.py
+bash docker/rocm/run.sh python3 docker/rocm/validate_p0.py
 bash docker/rocm/run.sh pytest -q
 ```
 

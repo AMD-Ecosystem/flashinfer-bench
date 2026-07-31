@@ -4,7 +4,7 @@ Exercises TVMFFIBuilder end-to-end: a .cu kernel with the default tvm-ffi bindin
 auto-detects the HIP backend -> hipcc, --offload-arch, -lamdhip64) and benchmarked against the
 Python reference on the GPU. Validates the P2 change that removed the hardcoded CUDA link flags.
 
-Run inside the container:  python docker/rocm/validate_cpp_tvmffi.py
+Run inside the container:  python3 docker/rocm/validate_cpp_tvmffi.py
 """
 
 from __future__ import annotations

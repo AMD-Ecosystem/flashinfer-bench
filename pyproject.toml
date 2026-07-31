@@ -24,13 +24,26 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+  # torch must be the ROCm build on AMD GPUs; install it first from
+  # https://repo.radeon.com/rocm/manylinux/rocm-rel-<ver>/ (see docs/start/installation.mdx).
   "torch>=2.8.0",
   "pydantic>=2.0.0",
   "safetensors>=0.5.0",
-  "flashinfer-python>=0.6.4",
+  # NOTE: the ROCm FlashInfer package (`amd-flashinfer`, imported as `flashinfer`) is only needed
+  # for the flashinfer integration/apply path and lives on AMD's package index, so it is an
+  # optional dependency under the `rocm` extra rather than a hard requirement.
   "apache-tvm-ffi>=0.1.2",
   "docstring-parser>=0.16",
   "pyyaml>=6.0",
+  # Imported unconditionally by flashinfer_bench.compile.registry. Reaches us transitively via
+  # torch today, so the omission is currently masked — declare it rather than rely on that.
+  "filelock>=3.12",
+  # These two reached us only via `flashinfer-python`, which this fork drops. Neither is imported
+  # by name here, which is why the loss is easy to miss: `safetensors.torch` needs numpy to load
+  # workload blobs, and the JIT builders shell out to the `ninja` binary (hence the explicit
+  # install in docker/rocm/Dockerfile). Without them, blob loading and every C++/HIP build fail.
+  "numpy>=1.24",
+  "ninja>=1.11",
 ]
 
 [project.urls]
@@ -55,7 +68,17 @@ dev = [
   "setuptools",
 ]
 serve = ["fastapi>=0.100.0", "uvicorn[standard]>=0.20.0"]
-cuda12 = ["nvidia-cublas-cu12>=12.3", "nvidia-cudnn-cu12>=9.0"]
+# ROCm / AMD GPU runtime. These wheels live on AMD's package index (not PyPI). They are versioned
+# per ROCm release and the two packages are published under different index paths — pin the indexes
+# that match your ROCm version to avoid mixing incompatible wheels. The values below mirror
+# docker/rocm/Dockerfile (ROCm 7.2): `amd-flashinfer` from the rocm-7.2.0 index, `amd_aiter` from
+# the rocm-7.1.1 index. `amd-flashinfer` imports as `flashinfer`; `amd_aiter` powers AITER solutions.
+# Install from a clone of this fork, not by name: the `rocm` extra is defined only here, so
+# `pip install "flashinfer-bench[rocm]"` resolves upstream's NVIDIA package off PyPI and drops it.
+#   pip install -e ".[rocm]" \
+#     --extra-index-url https://pypi.amd.com/rocm-7.2.0/simple/   # amd-flashinfer \
+#     --extra-index-url https://pypi.amd.com/rocm-7.1.1/simple/   # amd_aiter
+rocm = ["amd-flashinfer", "amd_aiter"]
 
 [project.scripts]
 flashinfer-bench = "flashinfer_bench.cli.main:cli"
@@ -66,7 +89,6 @@ include = ["flashinfer_bench*"]
 
 [tool.setuptools.package-data]
 "flashinfer_bench" = ["py.typed"]
-"flashinfer_bench._deps.cutlass" = ["include/**"]
 
 [tool.black]
 line-length = 100
@@ -110,3 +132,21 @@ log_cli_level = "INFO"
 version_scheme = "python-simplified-semver"
 fallback_version = "0.0.0.dev0"
 local_scheme = "no-local-version"
+
+# `uv sync`/`uv lock` resolve every extra, including `rocm`, regardless of which extras are being
+# installed. The AMD wheels are not on PyPI, so without these entries resolution fails outright
+# ("amd-flashinfer was not found in the package registry") and CI dies before running any test.
+# `explicit = true` keeps these indexes from being consulted for any other package.
+[[tool.uv.index]]
+name = "amd-rocm-720"
+url = "https://pypi.amd.com/rocm-7.2.0/simple/"
+explicit = true
+
+[[tool.uv.index]]
+name = "amd-rocm-711"
+url = "https://pypi.amd.com/rocm-7.1.1/simple/"
+explicit = true
+
+[tool.uv.sources]
+amd-flashinfer = { index = "amd-rocm-720" }
+amd_aiter = { index = "amd-rocm-711" }

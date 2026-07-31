@@ -3,7 +3,7 @@
 Profiles a solution with flashinfer_bench_run_rocprof and checks it returns per-kernel device
 timing + occupancy resources scoped to the runner's roctx region.
 
-Run inside the container:  python docker/rocm/validate_rocprof.py
+Run inside the container:  python3 docker/rocm/validate_rocprof.py
 """
 
 from __future__ import annotations
