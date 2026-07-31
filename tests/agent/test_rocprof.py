@@ -204,6 +204,33 @@ def test_header_admits_when_scoping_failed(tmp_path):
     assert f"(region '{PROFILE_REGION}'," not in out
 
 
+def test_disjoint_spans_do_not_merge_into_one_window(tmp_path):
+    """Two per-process regions must stay disjoint, not collapse into their bounding box.
+
+    _read_csv merges every marker CSV, so a multi-process run yields one span per process.
+    Taking (min start, max end) would bridge the gap and readmit whatever ran between them —
+    silently unscoped again, while the header still claims success.
+    """
+    (tmp_path / "marker_api_trace.csv").write_text(
+        _MARKER_HEADER
+        + _marker_row(PROFILE_REGION, 1000, 2000)
+        + _marker_row(PROFILE_REGION, 8000, 9000)
+    )
+    (tmp_path / "kernel_trace.csv").write_text(
+        _KERNEL_HEADER
+        + _kernel_row("in_first_span", 1100, 1200)
+        + _kernel_row("between_spans", 4000, 5000)  # inside the bounding box, inside no span
+        + _kernel_row("in_second_span", 8100, 8200)
+    )
+
+    out = _format_kernel_report(tmp_path, max_lines=None)
+
+    assert "in_first_span" in out
+    assert "in_second_span" in out
+    assert "between_spans" not in out
+    assert "(2 of 3)" in out
+
+
 def test_header_admits_when_window_matched_no_dispatch(tmp_path):
     """The other scoping-failure branch: a window was found but excludes every kernel.
 

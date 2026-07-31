@@ -117,8 +117,15 @@ def _read_csv(pattern: str) -> List[dict]:
 _MARKER_NAME_COLUMNS = ("Function", "Name")
 
 
-def _region_window(out_dir: Path) -> Optional[tuple]:
-    """Return (start_ns, end_ns) of the profiled roctx region, or None if not found."""
+def _region_spans(out_dir: Path) -> List[tuple]:
+    """Return every (start_ns, end_ns) span carrying the profiled roctx region, newest last.
+
+    A list rather than one window on purpose. ``_read_csv`` merges every marker CSV, so a
+    multi-process run yields one span per process. Collapsing them to (min start, max end) would
+    bridge the gap between disjoint ranges and silently readmit the kernels that ran *between*
+    them — the same "scoped but actually unscoped" failure this module exists to prevent, just
+    with extra steps. Callers test membership against any span instead.
+    """
     spans = []
     for r in _read_csv(str(out_dir / "**" / "*marker_api_trace*.csv")):
         # Search every candidate column, rather than taking the first populated one: a build
@@ -134,13 +141,7 @@ def _region_window(out_dir: Path) -> Optional[tuple]:
             # than silently giving up on region scoping.
             continue
 
-    if not spans:
-        return None
-    # Span the widest extent rather than trusting the first match. _read_csv merges every marker
-    # CSV, so several rows can carry the message: a second process's range, or an instantaneous
-    # roctxMark-style record whose start == end. Taking the first would hand back a window that
-    # contains no dispatch, and the report would silently fall back to every kernel again.
-    return min(s for s, _ in spans), max(e for _, e in spans)
+    return spans
 
 
 def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
@@ -167,13 +168,15 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
             f"Start_Timestamp/End_Timestamp values; cannot build a profile."
         )
 
-    window = _region_window(out_dir)
+    spans = _region_spans(out_dir)
     all_kernels = [(r, end - start) for r, start, end in parsed]
-    in_region = (
-        [(r, end - start) for r, start, end in parsed if window[0] <= start and end <= window[1]]
-        if window is not None
-        else []
-    )
+    # In-region means inside ANY span, not inside their bounding box — disjoint per-process ranges
+    # must not merge into one window that swallows whatever ran between them.
+    in_region = [
+        (r, end - start)
+        for r, start, end in parsed
+        if any(s <= start and end <= e for s, e in spans)
+    ]
 
     # Assign scope and selection together. Scoping can fail two ways — no marker row matched, or
     # the window matched no dispatch — and both fall back to every kernel in the trace, which then
@@ -187,7 +190,7 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
             f"region '{PROFILE_REGION}' ({len(in_region)} of {len(all_kernels)})",
         )
     else:
-        why = "not found in the marker trace" if window is None else "matched no dispatch"
+        why = "not found in the marker trace" if not spans else "matched no dispatch"
         selected = all_kernels
         scope = f"{UNSCOPED_MARKER} — region '{PROFILE_REGION}' {why}"
 
@@ -225,7 +228,10 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
 
     # Say once why the occupancy fields are blank, instead of leaving N lines of bare "?" that read
     # as "this kernel has no registers" rather than "this profiler build does not report them".
-    if selected and not any(k in selected[0][0] for k in ("VGPR_Count", "LDS_Block_Size")):
+    # Scan every selected row, not just the first: _read_csv merges per-process CSVs that can
+    # carry different headers, so keying off one row emits or suppresses the note by luck of sort
+    # order.
+    if selected and not any(k in r for r, _ in selected for k in ("VGPR_Count", "LDS_Block_Size")):
         lines += [
             "",
             "NOTE: this rocprofv3 build's kernel trace carries no occupancy columns "
