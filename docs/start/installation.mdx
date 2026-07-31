@@ -62,7 +62,7 @@ See `docker/rocm/README.md` for details. To install into an existing ROCm enviro
 #    (not a PEP 503 index), so use -f to keep PyPI available for torch's pure-python deps.
 #    Pin the version: unpinned, pip can prefer a newer CPU-only torch from PyPI over the ROCm
 #    wheel and silently break the install. 2.9.1 / ROCm 7.2 is what docker/rocm/Dockerfile pins.
-pip install "torch==2.9.1" -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2/
+python3 -m pip install "torch==2.9.1" -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2/
 # 2) flashinfer-bench + ROCm extras, installed from the fork clone above. Install from source, not
 #    by name: the `[rocm]` extra exists only in this fork, so `pip install "flashinfer-bench[rocm]"`
 #    would resolve upstream's NVIDIA package off PyPI and silently drop the extra.
@@ -70,7 +70,7 @@ pip install "torch==2.9.1" -f https://repo.radeon.com/rocm/manylinux/rocm-rel-7.
 #    docker/rocm/Dockerfile) — don't mix versions:
 #      amd-flashinfer (imports as `flashinfer`) -> rocm-7.2.0 index
 #      amd_aiter (AITER-backed solutions)       -> rocm-7.1.1 index
-pip install -e ".[rocm]" \
+python3 -m pip install -e ".[rocm]" \
     --extra-index-url https://pypi.amd.com/rocm-7.2.0/simple/ \
     --extra-index-url https://pypi.amd.com/rocm-7.1.1/simple/
 ```
