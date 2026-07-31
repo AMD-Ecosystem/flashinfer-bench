@@ -231,10 +231,14 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
 
     # Say once why the occupancy fields are blank, instead of leaving N lines of bare "?" that read
     # as "this kernel has no registers" rather than "this profiler build does not report them".
-    # Scan every selected row, not just the first: _read_csv merges per-process CSVs that can
-    # carry different headers, so keying off one row emits or suppresses the note by luck of sort
-    # order.
-    if selected and not any(k in r for r, _ in selected for k in ("VGPR_Count", "LDS_Block_Size")):
+    # Gate on a real value, not on key presence: DictReader creates the key with None for a short
+    # row, so a header that merely declares the column would suppress this note while every line
+    # still printed "?". Reuse field() so the test matches exactly what was rendered. Scan every
+    # selected row, not just the first — _read_csv merges per-process CSVs that can carry
+    # different headers, so keying off one row decides by luck of sort order.
+    if selected and not any(
+        field(r, k) != "?" for r, _ in selected for k in ("VGPR_Count", "LDS_Block_Size")
+    ):
         lines += [
             "",
             "NOTE: this rocprofv3 build's kernel trace carries no occupancy columns "

@@ -279,6 +279,19 @@ def test_short_rows_do_not_raise(tmp_path):
 
     assert "k1" in out
     assert "VGPR    ?" in out  # missing field renders as the placeholder, not None
+    # The header declares VGPR_Count, so a key-presence gate would suppress the explanation and
+    # leave the reader with bare "?" — the note must key off the rendered value instead.
+    assert "NOTE:" in out
+
+
+def test_occupancy_note_suppressed_when_columns_carry_values(tmp_path):
+    """The converse: on ROCm 7.x the columns are populated, so the note must not fire."""
+    (tmp_path / "kernel_trace.csv").write_text(_KERNEL_HEADER + _kernel_row("k", 1000, 2000))
+
+    out = _format_kernel_report(tmp_path, max_lines=None)
+
+    assert "VGPR   32" in out
+    assert "NOTE:" not in out
 
 
 def test_format_kernel_report_errors_when_no_row_parses(tmp_path):
