@@ -102,7 +102,7 @@ class TestDefaultEvaluatorDPS:
             inputs=[inp],
             ref_outputs=[[ref_tensor]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -128,7 +128,7 @@ class TestDefaultEvaluatorDPS:
             inputs=[inp],
             ref_outputs=[[ref_tensor]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -163,7 +163,7 @@ class TestDefaultEvaluatorDPS:
             inputs=[inp],
             ref_outputs=[[ref_tensor]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -190,7 +190,7 @@ class TestDefaultEvaluatorVR:
             inputs=[inp],
             ref_outputs=[[ref_tensor]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -216,7 +216,7 @@ class TestDefaultEvaluatorVR:
             inputs=[inp],
             ref_outputs=[[ref_tensor]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -241,7 +241,7 @@ class TestDefaultEvaluatorVR:
             inputs=[inp],
             ref_outputs=[[ref_tensor]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -278,7 +278,7 @@ class TestSamplingEvaluatorDPS:
             inputs=[inp],
             ref_outputs=[[expected_probs]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -307,7 +307,7 @@ class TestSamplingEvaluatorDPS:
             inputs=[inp],
             ref_outputs=[[expected_probs]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -339,7 +339,7 @@ class TestSamplingEvaluatorVR:
             inputs=[inp],
             ref_outputs=[[expected_probs]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -371,7 +371,7 @@ class TestLowBitEvaluatorDPS:
             inputs=[inp],
             ref_outputs=[[ref_tensor]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -398,7 +398,7 @@ class TestLowBitEvaluatorDPS:
             inputs=[inp],
             ref_outputs=[[ref_tensor]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -433,7 +433,7 @@ class TestLowBitEvaluatorDPS:
             inputs=[inp],
             ref_outputs=[[ref_tensor]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -463,7 +463,7 @@ class TestLowBitEvaluatorVR:
             inputs=[inp],
             ref_outputs=[[ref_tensor]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )
@@ -490,7 +490,7 @@ class TestLowBitEvaluatorVR:
             inputs=[inp],
             ref_outputs=[[ref_tensor]],
             ref_mean_latency_ms=1.0,
-            cfg=cfg,
+            cfg=cfg.resolve_eval_config(definition),
             log_path=str(tmp_path / "log"),
             device=device,
         )

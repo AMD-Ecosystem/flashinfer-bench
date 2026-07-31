@@ -259,9 +259,12 @@ def test_benchmark_with_mixed_results(tmp_path: Path, tmp_cache_dir: Path):
     assert EvaluationStatus.PASSED in statuses
     assert EvaluationStatus.INCORRECT_NUMERICAL in statuses
 
-    # Check that the traces were stored to the disk
-    assert (tmp_path / "traces" / "op" / "simple_add.jsonl").exists()
-    traces_loaded = load_jsonl_file(Trace, tmp_path / "traces" / "op" / "simple_add.jsonl")
+    # Check that the traces were stored to the disk. The on-disk layout is author-scoped
+    # (traces/{author}/{op_type}/{definition}.jsonl) as of #379; both solutions here declare
+    # author "tester".
+    trace_file = tmp_path / "traces" / "tester" / "op" / "simple_add.jsonl"
+    assert trace_file.exists()
+    traces_loaded = load_jsonl_file(Trace, trace_file)
     assert traces_loaded == result_traces
 
 

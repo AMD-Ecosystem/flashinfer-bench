@@ -168,7 +168,7 @@ tmp/flashinfer-trace/                  # local clone of the HuggingFace dataset
 ├── solutions/baseline/{op_type}/{definition_name}/...
 ├── workloads/{op_type}/{definition_name}.jsonl
 ├── blob/workloads/{op_type}/{definition_name}/*.safetensors
-└── traces/{op_type}/{definition_name}.jsonl
+└── traces/{author}/{op_type}/{definition_name}.jsonl
 ```
 
 Browse the [HuggingFace dataset](https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace)'s

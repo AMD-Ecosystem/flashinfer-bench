@@ -226,7 +226,7 @@ def test_correct(tmp_path, tmp_cache_dir):
         sol_runnable=sol_runnable,
         inputs=[inputs],
         ref_outputs=[ref_outputs],
-        cfg=cfg,
+        cfg=cfg.resolve_eval_config(definition),
         log_path=str(tmp_path / "log"),
         device=device,
     )
@@ -259,7 +259,7 @@ def test_shuffled(tmp_path, tmp_cache_dir):
         sol_runnable=sol_runnable,
         inputs=[inputs],
         ref_outputs=[ref_outputs],
-        cfg=cfg,
+        cfg=cfg.resolve_eval_config(definition),
         log_path=str(tmp_path / "log"),
         device=device,
     )
@@ -295,7 +295,7 @@ def test_wrong(tmp_path, tmp_cache_dir):
         sol_runnable=sol_runnable,
         inputs=[inputs],
         ref_outputs=[ref_outputs],
-        cfg=cfg,
+        cfg=cfg.resolve_eval_config(definition),
         log_path=str(tmp_path / "log"),
         device=device,
     )
@@ -335,7 +335,7 @@ def test_duplicate(tmp_path, tmp_cache_dir):
         sol_runnable=sol_runnable,
         inputs=[inputs],
         ref_outputs=[ref_outputs],
-        cfg=cfg,
+        cfg=cfg.resolve_eval_config(definition),
         log_path=str(tmp_path / "log"),
         device=device,
     )
@@ -373,7 +373,7 @@ def test_out_of_range(tmp_path, tmp_cache_dir):
         sol_runnable=sol_runnable,
         inputs=[inputs],
         ref_outputs=[ref_outputs],
-        cfg=cfg,
+        cfg=cfg.resolve_eval_config(definition),
         log_path=str(tmp_path / "log"),
         device=device,
     )
@@ -411,7 +411,7 @@ def test_unreachable_index(tmp_path, tmp_cache_dir):
         sol_runnable=sol_runnable,
         inputs=[inputs],
         ref_outputs=[ref_outputs],
-        cfg=cfg,
+        cfg=cfg.resolve_eval_config(definition),
         log_path=str(tmp_path / "log"),
         device=device,
     )

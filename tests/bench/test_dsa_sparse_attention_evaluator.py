@@ -188,7 +188,7 @@ def test_both_outputs(tmp_path, tmp_cache_dir):
         sol_runnable=sol_runnable,
         inputs=inputs,
         ref_outputs=ref_outputs,
-        cfg=cfg,
+        cfg=cfg.resolve_eval_config(definition),
         log_path=str(tmp_path / "log"),
         device=device,
     )
@@ -221,7 +221,7 @@ def test_output_only(tmp_path, tmp_cache_dir):
         sol_runnable=sol_runnable,
         inputs=inputs,
         ref_outputs=ref_outputs,
-        cfg=cfg,
+        cfg=cfg.resolve_eval_config(definition),
         log_path=str(tmp_path / "log"),
         device=device,
     )
@@ -255,7 +255,7 @@ def test_wrong_output(tmp_path, tmp_cache_dir):
         sol_runnable=sol_runnable,
         inputs=inputs,
         ref_outputs=ref_outputs,
-        cfg=cfg,
+        cfg=cfg.resolve_eval_config(definition),
         log_path=str(tmp_path / "log"),
         device=device,
     )
@@ -288,7 +288,7 @@ def test_empty_output(tmp_path, tmp_cache_dir):
         sol_runnable=sol_runnable,
         inputs=inputs,
         ref_outputs=ref_outputs,
-        cfg=cfg,
+        cfg=cfg.resolve_eval_config(definition),
         log_path=str(tmp_path / "log"),
         device=device,
     )
@@ -323,7 +323,7 @@ def test_too_many_outputs(tmp_path, tmp_cache_dir):
         sol_runnable=sol_runnable,
         inputs=inputs,
         ref_outputs=ref_outputs,
-        cfg=cfg,
+        cfg=cfg.resolve_eval_config(definition),
         log_path=str(tmp_path / "log"),
         device=device,
     )
