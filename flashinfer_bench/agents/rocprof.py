@@ -116,8 +116,10 @@ def _region_window(out_dir: Path) -> Optional[tuple]:
     """Return (start_ns, end_ns) of the profiled roctx region, or None if not found."""
     rows = _read_csv(str(out_dir / "**" / "*marker_api_trace*.csv"))
     for r in rows:
-        name = next((r[c] for c in _MARKER_NAME_COLUMNS if r.get(c)), "")
-        if PROFILE_REGION in name:
+        # Search every candidate column, rather than taking the first populated one: a build
+        # that emits both (say "Function" holding the API name "roctxRangePushA" and the message
+        # in "Name") would otherwise match the wrong column and silently lose scoping again.
+        if any(PROFILE_REGION in (r.get(c) or "") for c in _MARKER_NAME_COLUMNS):
             try:
                 return int(r["Start_Timestamp"]), int(r["End_Timestamp"])
             except (KeyError, TypeError, ValueError):

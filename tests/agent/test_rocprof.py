@@ -141,6 +141,28 @@ def test_region_scoping_accepts_legacy_name_column(tmp_path):
     assert "out_of_window" not in out
 
 
+def test_region_found_when_another_column_is_populated_but_unrelated(tmp_path):
+    """Every candidate column is searched, not just the first populated one.
+
+    A build that fills "Function" with the API name and puts the roctx message in "Name" would
+    defeat a first-truthy-wins lookup and silently lose scoping — the exact failure this fix
+    exists to remove, reintroduced one layer down.
+    """
+    (tmp_path / "marker_api_trace.csv").write_text(
+        "Domain,Function,Name,Start_Timestamp,End_Timestamp\n"
+        f"MARKER_CORE_RANGE_API,roctxRangePushA,{PROFILE_REGION},1000,9000\n"
+    )
+    (tmp_path / "kernel_trace.csv").write_text(
+        _KERNEL_HEADER + "in_window,2000,3000\nout_of_window,20000,30000\n"
+    )
+
+    out = _format_kernel_report(tmp_path, max_lines=None)
+
+    assert "in_window" in out
+    assert "out_of_window" not in out
+    assert "ALL kernels" not in out
+
+
 def test_header_admits_when_scoping_failed(tmp_path):
     """An unscoped report must not claim to be scoped — that is what misdirects an agent."""
     # No marker CSV at all -> correlation cannot happen.

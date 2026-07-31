@@ -91,14 +91,18 @@ def main() -> int:
         # "us |" alone is far too weak: it passed while region correlation was broken and the
         # report contained every kernel in the process (torch init, RNG, copies). Require the
         # header to state real scoping, which is the whole point of profiling under a roctx range.
+        # Scope the scoping checks to the header line: kernel names appear verbatim in the body,
+        # so searching the whole report could match "ALL kernels" or the region string inside a
+        # mangled symbol and flip the verdict either way.
+        header = report.split("\n", 1)[0]
         problems = []
         if report.startswith("ERROR"):
             problems.append("tool returned an error")
         if "us |" not in report:
             problems.append("no kernel timing lines")
-        if "ALL kernels" in report:
+        if "ALL kernels" in header:
             problems.append("region correlation failed — report is unscoped")
-        elif f"region '{PROFILE_REGION}'" not in report:
+        elif f"region '{PROFILE_REGION}'" not in header:
             problems.append("header does not report the profiled region")
 
         ok = not problems
