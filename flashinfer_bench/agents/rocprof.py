@@ -105,11 +105,19 @@ def _read_csv(pattern: str) -> List[dict]:
     return rows
 
 
+# Column holding the roctx message in marker_api_trace.csv. rocprofv3 writes it to "Function"
+# (verified on ROCm 6.4.1 and 7.2); "Name" is accepted as a fallback in case a build differs.
+# Do NOT filter on the "Domain" column: it is "MARKER_CORE_API" on 6.4.1 but
+# "MARKER_CORE_RANGE_API" on 7.2, so matching it would re-break scoping on one of the two.
+_MARKER_NAME_COLUMNS = ("Function", "Name")
+
+
 def _region_window(out_dir: Path) -> Optional[tuple]:
     """Return (start_ns, end_ns) of the profiled roctx region, or None if not found."""
     rows = _read_csv(str(out_dir / "**" / "*marker_api_trace*.csv"))
     for r in rows:
-        if PROFILE_REGION in (r.get("Name") or ""):
+        name = next((r[c] for c in _MARKER_NAME_COLUMNS if r.get(c)), "")
+        if PROFILE_REGION in name:
             try:
                 return int(r["Start_Timestamp"]), int(r["End_Timestamp"])
             except (KeyError, TypeError, ValueError):
@@ -145,18 +153,28 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
         )
 
     window = _region_window(out_dir)
-    selected = [
-        (r, end - start)
-        for r, start, end in parsed
-        if window is None or (start >= window[0] and end <= window[1])
-    ]
-    # Fall back to all kernels if region correlation found nothing.
+    selected = (
+        [(r, end - start) for r, start, end in parsed if window[0] <= start and end <= window[1]]
+        if window is not None
+        else []
+    )
+
+    # Scoping can fail two ways: no marker row matched (window is None), or the window matched no
+    # dispatch. Both fall back to every kernel in the trace, which then includes the runner's
+    # warmup dispatch and any JIT/setup work. Say so in the header — an unscoped report that
+    # claims to be scoped sends agents optimizing kernels the solution never ran.
+    if window is None:
+        scope = f"ALL kernels — region '{PROFILE_REGION}' not found in the marker trace"
+    elif not selected:
+        scope = f"ALL kernels — region '{PROFILE_REGION}' matched no dispatch"
+    else:
+        scope = f"region '{PROFILE_REGION}'"
     if not selected:
         selected = [(r, end - start) for r, start, end in parsed]
 
     selected.sort(key=lambda x: x[1], reverse=True)
     lines = [
-        f"rocprofv3 kernel profile (region '{PROFILE_REGION}', "
+        f"rocprofv3 kernel profile ({scope}, "
         f"{len(selected)} kernel dispatch(es), sorted by duration):",
         "",
     ]
@@ -168,8 +186,11 @@ def _format_kernel_report(out_dir: Path, max_lines: Optional[int]) -> str:
             f"  {dur_ns / 1000.0:9.3f} us | VGPR {r.get('VGPR_Count','?'):>4} "
             f"SGPR {r.get('SGPR_Count','?'):>4} LDS {r.get('LDS_Block_Size','?'):>6} "
             f"scratch {r.get('Scratch_Size','?'):>6} | "
-            f"grid {r.get('Grid_Size_X','?')}x{r.get('Grid_Size_Y','?')}x{r.get('Grid_Size_Z','?')} "
-            f"block {r.get('Workgroup_Size_X','?')}x{r.get('Workgroup_Size_Y','?')}x{r.get('Workgroup_Size_Z','?')}"
+            # Grid_Size_* is a work-item count (HSA semantics), NOT CUDA gridDim. Labelling it
+            # "grid" beside "block" would read as workgroups and overstate the launch by the
+            # workgroup size, so say "items" explicitly.
+            f"items {r.get('Grid_Size_X','?')}x{r.get('Grid_Size_Y','?')}x{r.get('Grid_Size_Z','?')} "
+            f"wg {r.get('Workgroup_Size_X','?')}x{r.get('Workgroup_Size_Y','?')}x{r.get('Workgroup_Size_Z','?')}"
         )
         lines.append(f"    {name}")
 
