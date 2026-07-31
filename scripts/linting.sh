@@ -12,4 +12,8 @@ fi
 # are silently fixed in the ephemeral checkout, the job passes, and the repairs are discarded with
 # the runner — every auto-fixable violation lands on the branch unnoticed. Fail instead; run
 # `ruff check . --fix` locally to repair.
+#
+# Explicit rather than relying on the default: pyproject sets no `[tool.ruff] fix`, so a bare
+# `ruff check .` does not fix today — but adding `fix = true` for local convenience would silently
+# restore the masking this flag exists to stop.
 ruff check . --no-fix

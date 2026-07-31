@@ -118,13 +118,16 @@ _MARKER_NAME_COLUMNS = ("Function", "Name")
 
 
 def _region_spans(out_dir: Path) -> List[tuple]:
-    """Return every (start_ns, end_ns) span carrying the profiled roctx region, newest last.
+    """Return every (start_ns, end_ns) span carrying the profiled roctx region, in no order.
 
     A list rather than one window on purpose. ``_read_csv`` merges every marker CSV, so a
     multi-process run yields one span per process. Collapsing them to (min start, max end) would
     bridge the gap between disjoint ranges and silently readmit the kernels that ran *between*
     them — the same "scoped but actually unscoped" failure this module exists to prevent, just
     with extra steps. Callers test membership against any span instead.
+
+    Order is deliberately unspecified: both consumers are order-independent (``any(...)`` over the
+    spans, and an emptiness check), so sorting would be work no caller asks for.
     """
     spans = []
     for r in _read_csv(str(out_dir / "**" / "*marker_api_trace*.csv")):
