@@ -21,7 +21,7 @@ on:
 
 jobs:
   rocm-gpu-test:
-    name: ROCm GPU tests (gfx942)
+    name: ROCm GPU tests (${{ vars.ROCM_ARCH || 'gfx942' }})
     # Security guard: only run for repo-owned branches, never for forked-PR code — a self-hosted
     # GPU runner must not execute untrusted PRs. Keep this even if the pull_request trigger is
     # enabled above.
@@ -34,8 +34,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ROCM_ARCH is a list, not a constant: override it when the runner is not CDNA3 so the
-      # image's PYTORCH_ROCM_ARCH / TVM_FFI_ROCM_ARCH_LIST match the hardware actually attached.
+      # ROCM_ARCH is a list, not a constant: set the `ROCM_ARCH` repo variable when the runner is
+      # not CDNA3, so the image's PYTORCH_ROCM_ARCH / TVM_FFI_ROCM_ARCH_LIST match the hardware
+      # actually attached. Space-separated for multiple targets, matching docker/rocm/README.md:
+      # e.g. `gfx942` or `gfx942 gfx950`. The job name above reports whichever value is in effect.
       - name: Build ROCm dev image
         run: |
           DOCKER_BUILDKIT=0 docker build --build-arg ROCM_ARCH="${ROCM_ARCH}" \

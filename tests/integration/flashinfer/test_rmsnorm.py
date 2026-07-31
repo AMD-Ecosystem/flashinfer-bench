@@ -25,7 +25,8 @@ from flashinfer_bench.data import (
 )
 
 # These modules call into `flashinfer` (amd-flashinfer on ROCm), an optional extra rather
-# than a hard dependency. tests/conftest.py skips the marker when it is not importable.
+# than a hard dependency. tests/conftest.py skips this marker when the package is not
+# installed; an installed-but-broken flashinfer is left to fail rather than skip.
 pytestmark = pytest.mark.requires_flashinfer
 
 
