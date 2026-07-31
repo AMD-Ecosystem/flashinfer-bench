@@ -1,6 +1,6 @@
 """P0 in-container validation for the ROCm port.
 
-Run inside the container:  python docker/rocm/validate_p0.py
+Run inside the container:  python3 docker/rocm/validate_p0.py
 Exercises the full ROCm stack end-to-end and reports PASS/FAIL per check.
 """
 

@@ -67,7 +67,9 @@ serve = ["fastapi>=0.100.0", "uvicorn[standard]>=0.20.0"]
 # that match your ROCm version to avoid mixing incompatible wheels. The values below mirror
 # docker/rocm/Dockerfile (ROCm 7.2): `amd-flashinfer` from the rocm-7.2.0 index, `amd_aiter` from
 # the rocm-7.1.1 index. `amd-flashinfer` imports as `flashinfer`; `amd_aiter` powers AITER solutions.
-#   pip install "flashinfer-bench[rocm]" \
+# Install from a clone of this fork, not by name: the `rocm` extra is defined only here, so
+# `pip install "flashinfer-bench[rocm]"` resolves upstream's NVIDIA package off PyPI and drops it.
+#   pip install -e ".[rocm]" \
 #     --extra-index-url https://pypi.amd.com/rocm-7.2.0/simple/   # amd-flashinfer \
 #     --extra-index-url https://pypi.amd.com/rocm-7.1.1/simple/   # amd_aiter
 rocm = ["amd-flashinfer", "amd_aiter"]

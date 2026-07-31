@@ -48,7 +48,7 @@ The supported, reproducible path is the ROCm dev container:
 # Build and enter the ROCm dev image (ROCm 7.2 + torch-ROCm + amd-flashinfer + amd_aiter + tvm-ffi)
 bash docker/rocm/run.sh
 # Validate the stack end-to-end on the GPU
-bash docker/rocm/run.sh python docker/rocm/validate_p0.py
+bash docker/rocm/run.sh python3 docker/rocm/validate_p0.py
 ```
 
 See `docker/rocm/README.md` for details. To install into an existing ROCm environment instead:

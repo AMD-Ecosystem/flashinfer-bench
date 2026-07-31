@@ -21,7 +21,7 @@ as the fallback when something breaks. Full detail lives in those skills; this i
 bash docker/rocm/run.sh
 
 # Inside the container, prove the stack works end-to-end on the GPU:
-python docker/rocm/validate_p0.py          # expect 8/8 PASS on gfx942
+python3 docker/rocm/validate_p0.py          # expect 8/8 PASS on gfx942
 python -c "import torch; assert torch.version.hip; \
   p=torch.cuda.get_device_properties(0); print(p.name, p.gcnArchName)"
 ```
@@ -34,7 +34,7 @@ AITER is AMD's tuned op library — for covered op-types it gives you a fast sol
 
 ```bash
 # End-to-end proof across every AITER-covered op-type (build → time → correctness → speedup):
-python docker/rocm/validate_aiter_ops.py
+python3 docker/rocm/validate_aiter_ops.py
 ```
 
 Or generate an AITER solution for a specific dataset definition in Python:

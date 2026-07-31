@@ -4,7 +4,7 @@ Flow: build a dataset with an RMSNorm definition -> augment it with an AITER sol
 `augment_trace_set_with_aiter` -> benchmark to produce traces -> build ApplyRuntime and confirm
 `dispatch` routes to the AITER solution (fallback raises if it were used) and returns correct output.
 
-Run inside the container:  python docker/rocm/validate_aiter_apply.py
+Run inside the container:  python3 docker/rocm/validate_aiter_apply.py
 """
 
 from __future__ import annotations
