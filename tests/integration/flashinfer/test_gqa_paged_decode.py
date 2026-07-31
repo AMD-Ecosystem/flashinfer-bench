@@ -24,9 +24,10 @@ from flashinfer_bench.data import (
     Workload,
 )
 
-# `flashinfer` here is amd-flashinfer on ROCm; it is an optional extra, not a hard
-# dependency, so skip these integration tests wherever it is not installed.
-pytest.importorskip("flashinfer", reason="flashinfer (amd-flashinfer on ROCm) not installed")
+# These modules call into `flashinfer` (amd-flashinfer on ROCm), an optional extra rather
+# than a hard dependency. tests/conftest.py skips this marker when the package is not
+# installed; an installed-but-broken flashinfer is left to fail rather than skip.
+pytestmark = pytest.mark.requires_flashinfer
 
 
 @pytest.mark.skipif(torch.cuda.device_count() == 0, reason="CUDA devices not available")

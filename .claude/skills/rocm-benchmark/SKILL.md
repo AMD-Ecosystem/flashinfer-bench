@@ -116,11 +116,11 @@ otherwise you'll misread a fallback as a measurement:
 
 ```bash
 tools/gpu-lock --gpus 1 -- \
-  python -m flashinfer_bench run --local <trace_dir> --definitions <def> --save-results
+  python3 -m flashinfer_bench run --local <trace_dir> --definitions <def> --save-results
 
 # high-fidelity final pass
 FIB_TIMING_BACKEND=rocprof FIB_L2_FLUSH_MB=256 \
-  tools/gpu-lock --gpus 1 -- python -m flashinfer_bench run --local <trace_dir> --definitions <def>
+  tools/gpu-lock --gpus 1 -- python3 -m flashinfer_bench run --local <trace_dir> --definitions <def>
 ```
 
 ## CDNA tuning references

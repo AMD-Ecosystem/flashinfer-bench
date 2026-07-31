@@ -28,9 +28,10 @@ day-to-day commands below apply either way. Rationale + pinned versions: `ROCM_P
 ## Bare-metal essentials (what the container encapsulates)
 
 - **Torch must be the AMD ROCm build.** Install from AMD's ROCm repo (`repo.radeon.com/rocm/...`);
-  a stray PyPI/CPU wheel breaks everything. Verify: `python -c "import torch; assert torch.version.hip"`.
-- **`amd-flashinfer`** (imports as `flashinfer`) from `pypi.amd.com`; install bench with `--no-deps`
-  so the NVIDIA `flashinfer-python` dep is never pulled (pending the `pyproject` swap, §3.12).
+  a stray PyPI/CPU wheel breaks everything. Verify: `python3 -c "import torch; assert torch.version.hip"`.
+- **`amd-flashinfer`** (imports as `flashinfer`) from `pypi.amd.com`. `pyproject.toml` no longer
+  declares NVIDIA's `flashinfer-python` (§3.12 swap done; `amd-flashinfer` sits under the optional
+  `rocm` extra), so `--no-deps` now only guards against pip pulling the PyPI CUDA `torch`.
 - **AITER** is a separate install matched to the ROCm version:
   ```bash
   git clone --recursive https://github.com/ROCm/aiter.git
@@ -58,7 +59,7 @@ docker build -f docker/rocm/Dockerfile --build-arg ROCM_ARCH="gfx942 gfx950" -t 
 
 # Enter / one-off (bind-mounts the repo, editable --no-deps install, passes GPU device flags)
 bash docker/rocm/run.sh
-bash docker/rocm/run.sh python docker/rocm/validate_p0.py
+bash docker/rocm/run.sh python3 docker/rocm/validate_p0.py
 bash docker/rocm/run.sh pytest -q
 ```
 
@@ -70,8 +71,8 @@ in `ROCM_PORT_PLAN.md`.
 ## Validate
 
 ```bash
-python docker/rocm/validate_p0.py        # expect 8/8 on gfx942
-python docker/rocm/validate_aiter_ops.py # AITER solutions through the real Benchmark loop
+python3 docker/rocm/validate_p0.py        # expect 8/8 on gfx942
+python3 docker/rocm/validate_aiter_ops.py # AITER solutions through the real Benchmark loop
 ```
 
 `validate_p0.py` checks torch.cuda on device, a GPU matmul, `import flashinfer`/`aiter`/

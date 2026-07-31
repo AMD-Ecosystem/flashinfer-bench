@@ -48,9 +48,10 @@ skill):
 | `amd_aiter` | AITER — AMD's tuned ROCm op library (from `pypi.amd.com`) |
 | `apache-tvm-ffi` | HIP-capable (auto-selects `hipcc`, `-lamdhip64`, `--offload-arch`) |
 
-`flashinfer-bench` itself is bind-mounted and installed editable with `--no-deps` (so the NVIDIA
-`flashinfer-python` dependency is never pulled — pending the `pyproject` swap in `ROCM_PORT_PLAN.md`
-§3.12).
+`flashinfer-bench` itself is bind-mounted and installed editable with `--no-deps`. `pyproject.toml`
+no longer declares the NVIDIA `flashinfer-python` dependency (the `ROCM_PORT_PLAN.md` §3.12 swap is
+done; `amd-flashinfer` now lives under the optional `rocm` extra), so `--no-deps` remains only to
+stop pip from resolving the PyPI CUDA `torch` over the installed ROCm build.
 
 ### AITER as a first-class kernel source
 
@@ -85,7 +86,7 @@ Full setup (container + bare-metal) is in [`rocm-setup`](.claude/skills/rocm-set
 ### Non-obvious ROCm gotchas
 
 - **Torch must be the AMD ROCm build** (from `repo.radeon.com`); a stray PyPI/CPU wheel breaks
-  everything. Guard: `python -c "import torch; assert torch.version.hip"`.
+  everything. Guard: `python3 -c "import torch; assert torch.version.hip"`.
 - **AITER is a separate install** matched to the ROCm version (`ROCm/aiter`, `setup.py develop`, or
   the pinned `amd_aiter` wheel). Check via `flashinfer.aiter_utils.is_aiter_supported` /
   `flashinfer_bench.integration.aiter.is_aiter_available`.
