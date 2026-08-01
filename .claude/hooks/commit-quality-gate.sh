@@ -11,11 +11,21 @@
 # must not wedge every commit in the repo.
 set -uo pipefail
 
+# Command-segment matchers, POSIX ERE only. `\b` is a GNU/ugrep extension that POSIX ERE does
+# not define; a matcher that quietly fails to match is a gate that quietly does not gate, which
+# is the one failure mode this file exists to prevent. Explicit classes behave the same under
+# any grep.
+#   (^|[;&|])           start of a command segment, so `cd x && git commit` still matches
+#   git([[:space:]]+…)? optional global flags, e.g. `git -C sub commit`
+#   ([^[:alnum:]_-]|$)  right boundary, so `git commitfoo` does not match
+readonly COMMIT_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+commit([^[:alnum:]_-]|$)'
+# `a` may sit anywhere in a short-option cluster: -a, -am, -ma are all "commit all".
+readonly COMMIT_ALL_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+(-[[:alnum:]]*a[[:alnum:]]*|--all)([[:space:]]|$)'
+
 payload=$(cat)
 cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
 
-# Match real commit invocations, including compound ones (`cd x && git commit -m ...`).
-grep -Eq '(^|[;&|]) *git\b[^;&|]*\bcommit\b' <<<"$cmd" || exit 0
+grep -Eq "$COMMIT_RE" <<<"$cmd" || exit 0
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$root" || exit 0
@@ -31,17 +41,22 @@ deny() {
   exit 0
 }
 
-# `git commit -a` stages tracked changes itself, so the file set differs from `--cached`.
-if grep -Eq '\bcommit\b[^;&|]*(-[a-zA-Z]*a|--all)\b' <<<"$cmd"; then
-  mapfile -t files < <(git diff --name-only --diff-filter=ACMR HEAD)
-  diff_args=(HEAD)
+# `git commit -a` publishes the union of the index and tracked worktree changes. Neither diff
+# alone covers that union: `--cached` misses unstaged edits, and `HEAD` misses a path that was
+# staged and then reverted in the worktree — whose staged content still gets committed. Scan both.
+if grep -Eq "$COMMIT_ALL_RE" <<<"$cmd"; then
+  scopes=(HEAD --cached)
 else
-  mapfile -t files < <(git diff --cached --name-only --diff-filter=ACMR)
-  diff_args=(--cached)
+  scopes=(--cached)
 fi
 
-# Nothing to check — let git produce its own "nothing to commit" error.
-((${#files[@]})) || exit 0
+files=()
+for scope in "${scopes[@]}"; do
+  while IFS= read -r f; do [[ -n "$f" ]] && files+=("$f"); done \
+    < <(git diff --name-only --diff-filter=ACMR "$scope" 2>/dev/null)
+done
+((${#files[@]})) || exit 0   # nothing to check — let git raise its own "nothing to commit"
+mapfile -t files < <(printf '%s\n' "${files[@]}" | sort -u)
 
 problems=()
 
@@ -56,10 +71,14 @@ if [[ ! -x "$(git rev-parse --git-common-dir)/hooks/pre-commit" ]] \
   fi
 fi
 
-# 2. Debug leftovers in added lines only — deliberately narrow, to stay false-positive free.
-#    Bare `print(` is excluded: this repo's scripts/ use it legitimately.
-added=$(git diff "${diff_args[@]}" -U0 -- "${files[@]}" 2>/dev/null | grep '^+' | grep -v '^+++')
-if hits=$(grep -nE 'breakpoint\(\)|\bpdb\.set_trace\b|console\.log\(|\bdebugger;' <<<"$added"); then
+# 2. Debug leftovers in added lines only — scanning whole files would flag pre-existing code the
+#    commit never touched. Deliberately narrow to stay false-positive free: bare `print(` is
+#    excluded because scripts/ uses it legitimately, and a gate that cries wolf gets disabled.
+added=""
+for scope in "${scopes[@]}"; do
+  added+=$(git diff "$scope" -U0 -- "${files[@]}" 2>/dev/null | grep '^+' | grep -v '^+++')$'\n'
+done
+if hits=$(grep -nE 'breakpoint\(\)|(^|[^[:alnum:]_.])pdb\.set_trace|console\.log\(|(^|[^[:alnum:]_])debugger;' <<<"$added" | sort -u -t: -k2); then
   problems+=("debug leftovers in the staged diff:"$'\n'"$hits")
 fi
 

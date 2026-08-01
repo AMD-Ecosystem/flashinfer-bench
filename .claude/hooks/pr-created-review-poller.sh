@@ -9,10 +9,13 @@
 # exists to hook. The scheduled prompt below deletes itself instead.
 set -uo pipefail
 
+# POSIX ERE only — `\b` is a GNU/ugrep extension. See the note in commit-quality-gate.sh.
+readonly PR_CREATE_RE='(^|[;&|])[[:space:]]*gh([[:space:]]+[^;&|]*)?[[:space:]]+pr[[:space:]]+create([^[:alnum:]_-]|$)'
+
 payload=$(cat)
 cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
 
-grep -Eq 'gh\b[^;&|]*\bpr\b[^;&|]*\bcreate\b' <<<"$cmd" || exit 0
+grep -Eq "$PR_CREATE_RE" <<<"$cmd" || exit 0
 
 # gh prints the PR URL on success; absence means the create failed and there is nothing to poll.
 out=$(printf '%s' "$payload" | jq -r '.tool_response | if type == "object" then ((.stdout // "") + "\n" + (.stderr // "")) else tostring end' 2>/dev/null)

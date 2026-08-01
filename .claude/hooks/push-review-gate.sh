@@ -14,10 +14,14 @@
 #      after a review re-arms the gate rather than riding on the old acknowledgement.
 set -uo pipefail
 
+# POSIX ERE only — `\b` is a GNU/ugrep extension, and a matcher that quietly fails to match is a
+# gate that quietly does not gate. See the fuller note in commit-quality-gate.sh.
+readonly PUSH_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+push([^[:alnum:]_-]|$)'
+
 payload=$(cat)
 cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
 
-grep -Eq '(^|[;&|]) *git\b[^;&|]*\bpush\b' <<<"$cmd" || exit 0
+grep -Eq "$PUSH_RE" <<<"$cmd" || exit 0
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$root" || exit 0
@@ -44,8 +48,20 @@ else
   range="origin/amd-integration..HEAD"
 fi
 
-mapfile -t shas < <(git rev-list "$range" 2>/dev/null)
-((${#shas[@]})) || exit 0   # nothing new to publish
+# Fail closed if the range cannot be resolved. Discarding the error and treating it as an empty
+# range would silently allow an unreviewed push whenever the base ref is missing locally — a
+# fresh clone that never fetched amd-integration, a renamed remote, a deleted upstream.
+if ! rev_out=$(git rev-list "$range" 2>&1); then
+  deny "Cannot determine what this push would publish — \`git rev-list $range\` failed:
+
+$rev_out
+
+Refusing rather than guessing: an unresolvable range must not read as \"nothing new\".
+Fetch the base (\`git fetch origin amd-integration\`) or set the branch upstream, then retry."
+fi
+
+[[ -n "$rev_out" ]] || exit 0   # genuinely nothing new to publish
+mapfile -t shas <<<"$rev_out"
 
 # Exemption 1 — the whole range answers an automated review.
 for s in "${shas[@]}"; do

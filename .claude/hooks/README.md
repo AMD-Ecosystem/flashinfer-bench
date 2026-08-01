@@ -87,12 +87,22 @@ skip compound commands like `cd sub && git commit -m x`, and a gate with a known
 one that costs a few milliseconds per Bash call.
 
 **Invoked as script files, not inline shell.** Hook commands run through `$SHELL`, which is `zsh`
-here — and zsh and bash disagree on details like `\b` in `grep -E` patterns and backslash handling
-in `echo`. A path to a file with a `#!/usr/bin/env bash` shebang parses identically under either
-shell and then runs under a known one.
+here, and zsh and bash disagree on details — notably backslash handling in the builtin `echo`,
+which silently corrupts JSON containing `\n`. A path to a file with a `#!/usr/bin/env bash`
+shebang parses identically under either shell and then runs under a known one.
 
-**Failures are silent, never fatal.** Both scripts exit 0 on their own internal errors. A hook that
-crashes on an edge case must not wedge every commit in the repo.
+**Matchers are POSIX ERE, with no `\b`.** Word-boundary `\b` is a GNU/ugrep extension that POSIX
+ERE does not define. On a grep without it the matcher never fires and the gate silently stops
+gating — strictly worse than no gate, since it still looks installed. The patterns use explicit
+`[[:space:]]` and `[^[:alnum:]_-]` boundaries instead, and are covered by a case table including
+compound commands, global flags (`git -C sub commit`), and near-misses (`git commitfoo`,
+`gh pr createx`).
+
+**Failures are silent, never fatal — except when they hide the answer.** The scripts exit 0 on
+their own internal errors, because a hook that crashes must not wedge every commit in the repo.
+The exception is a range that cannot be resolved: `push-review-gate.sh` denies rather than
+treating `git rev-list` failure as "nothing to publish", since that would let an unreviewed push
+through precisely when the tooling is confused.
 
 ## What these hooks cannot do
 
