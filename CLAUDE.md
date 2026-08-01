@@ -165,10 +165,10 @@ content do so through a local clone of the HF dataset at `tmp/flashinfer-trace/`
 tmp/flashinfer-trace/                  # local clone of the HuggingFace dataset
 ├── definitions/{op_type}/{definition_name}.json
 ├── tests/references/test_{definition_name}.py
-├── solutions/baseline/{op_type}/{definition_name}/...
+├── solutions/{author}/{op_type}/{definition_name}/...   # e.g. author "baseline"
 ├── workloads/{op_type}/{definition_name}.jsonl
 ├── blob/workloads/{op_type}/{definition_name}/*.safetensors
-└── traces/{op_type}/{definition_name}.jsonl
+└── traces/{author}/{op_type}/{definition_name}.jsonl
 ```
 
 Browse the [HuggingFace dataset](https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace)'s

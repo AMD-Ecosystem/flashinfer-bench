@@ -61,3 +61,10 @@ sglang_*.jsonl
 .agent-prompt.md
 .claude/agents.json
 .claude/architect-loop.local.md
+
+# GPU run artifacts. A HIP fault dumps a multi-hundred-MB `core` (and `core.gpu`) into the
+# working directory, and rocprofv3 leaves `.rocprofv3/`. Inside the ROCm container these are
+# written as root, so an accidental `git add -A` fails outright on them.
+core
+core.*
+.rocprofv3/
