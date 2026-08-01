@@ -56,6 +56,10 @@ class TVMFFIBuilder(Builder):
         """Initialize the TVMFFIBuilder."""
         super().__init__(self._PACKAGE_PREFIX, self._BUILD_DIR_NAME)
 
+    def _is_target_specific(self) -> bool:
+        """True: hipcc/nvcc compile this solution for one ``--offload-arch``/``-arch`` target."""
+        return True
+
     # BLAS dependency names a solution may declare (the CUDA name `cublas` is accepted and mapped).
     # Only hipBLAS/rocBLAS are linked below; hipBLASLt (a separate lib/header) is not wired yet.
     _BLAS_DEPS: ClassVar[List[str]] = ["cublas", "hipblas", "rocblas"]

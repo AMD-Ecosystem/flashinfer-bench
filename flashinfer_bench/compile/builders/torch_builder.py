@@ -38,6 +38,10 @@ class TorchBuilder(Builder):
         """Initialize the TorchBuilder and discover available CUDA dependencies."""
         super().__init__(self._PACKAGE_PREFIX, self._BUILD_DIR_NAME)
 
+    def _is_target_specific(self) -> bool:
+        """True: this builder emits a ``.so`` compiled for one GPU target."""
+        return True
+
     @staticmethod
     def is_available() -> bool:
         """Check if CUDA is available in the current environment.

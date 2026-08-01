@@ -2,11 +2,65 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from flashinfer_bench.data import Solution, SourceFile
+
+
+def get_build_target_tag() -> str:
+    """Return a short tag identifying the GPU target native code is compiled for.
+
+    Build caches are keyed on ``Solution.hash()``, which covers source and build spec but says
+    nothing about the machine doing the build. A ``.so`` compiled with ``--offload-arch=gfx942``
+    is not loadable on gfx950, yet it is byte-identical from the cache's point of view — so
+    without this tag a shared or copied ``FIB_CACHE_PATH`` hands gfx950 a gfx942 binary. That
+    fails at first kernel launch with ``hipErrorNoBinaryForGpu`` and, because the cached artifact
+    still looks valid, re-running never rebuilds it.
+
+    The tag prefers the explicit arch-list environment variables the build actually honours,
+    falling back to the live device's ``gcnArchName`` (which includes feature suffixes such as
+    ``:xnack-``; code objects are built per xnack variant, so they belong in the key).
+
+    Returns
+    -------
+    str
+        A filesystem-safe tag such as ``hip_gfx942`` or ``cuda_sm90``, or ``unknown`` when no
+        target can be determined.
+    """
+    for env_name in ("TVM_FFI_ROCM_ARCH_LIST", "PYTORCH_ROCM_ARCH"):
+        value = os.environ.get(env_name)
+        if value:
+            return _sanitize_target_tag(f"hip-{value}")
+    value = os.environ.get("TORCH_CUDA_ARCH_LIST")
+    if value:
+        return _sanitize_target_tag(f"cuda-{value}")
+
+    detected = _detect_device_target()
+    return _sanitize_target_tag(detected) if detected else "unknown"
+
+
+def _detect_device_target() -> Optional[str]:
+    """Return a ``hip-<gcnArch>`` / ``cuda-<sm>`` tag for the live device, or None."""
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return None
+        props = torch.cuda.get_device_properties(0)
+    except Exception:
+        return None
+    gcn_arch = getattr(props, "gcnArchName", None)
+    if gcn_arch:
+        return f"hip-{gcn_arch}"
+    return f"cuda-sm{props.major}{props.minor}"
+
+
+def _sanitize_target_tag(tag: str) -> str:
+    """Reduce a target tag to lowercase alphanumerics and underscores for use as a path segment."""
+    return re.sub(r"[^0-9a-zA-Z]+", "_", tag).strip("_").lower()
 
 
 def write_sources_to_path(path: Path, sources: List[SourceFile]) -> List[Path]:

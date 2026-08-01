@@ -4,7 +4,11 @@ import sys
 
 import pytest
 
-from flashinfer_bench.compile.utils import create_package_name, write_sources_to_path
+from flashinfer_bench.compile.utils import (
+    create_package_name,
+    get_build_target_tag,
+    write_sources_to_path,
+)
 from flashinfer_bench.data import BuildSpec, Solution, SourceFile, SupportedLanguages
 
 
@@ -103,3 +107,99 @@ def test_create_package_name_deterministic():
 
 if __name__ == "__main__":
     pytest.main(sys.argv)
+
+
+def test_get_build_target_tag_prefers_rocm_arch_env(monkeypatch):
+    """TVM_FFI_ROCM_ARCH_LIST wins, since that is the arch the build actually honours."""
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx942")
+    monkeypatch.delenv("PYTORCH_ROCM_ARCH", raising=False)
+    monkeypatch.delenv("TORCH_CUDA_ARCH_LIST", raising=False)
+
+    assert get_build_target_tag() == "hip_gfx942"
+
+
+def test_get_build_target_tag_distinguishes_architectures(monkeypatch):
+    """Different targets must produce different tags, or the cache cannot separate them."""
+    monkeypatch.delenv("PYTORCH_ROCM_ARCH", raising=False)
+    monkeypatch.delenv("TORCH_CUDA_ARCH_LIST", raising=False)
+
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx942")
+    gfx942 = get_build_target_tag()
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx950")
+    gfx950 = get_build_target_tag()
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx942 gfx950")
+    both = get_build_target_tag()
+
+    assert len({gfx942, gfx950, both}) == 3
+    # Path-segment safe: the multi-arch list must not leak a space or separator.
+    assert both == "hip_gfx942_gfx950"
+
+
+def test_get_build_target_tag_is_filesystem_safe(monkeypatch):
+    """gcnArchName carries feature suffixes like ':xnack-' that cannot go into a path raw."""
+    monkeypatch.delenv("PYTORCH_ROCM_ARCH", raising=False)
+    monkeypatch.delenv("TORCH_CUDA_ARCH_LIST", raising=False)
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx942:sramecc+:xnack-")
+
+    tag = get_build_target_tag()
+
+    assert tag == "hip_gfx942_sramecc_xnack"
+    assert set(tag) <= set("abcdefghijklmnopqrstuvwxyz0123456789_")
+
+
+def test_native_builders_segregate_cache_by_target(monkeypatch, tmp_path):
+    """A gfx942 .so must not be served from cache to a gfx950 run.
+
+    Regression guard: the cache key is Solution.hash(), which is identical across architectures,
+    so without a target segment in the path the second call returns the first build's artifact
+    and the kernel fails at launch with hipErrorNoBinaryForGpu.
+    """
+    from flashinfer_bench.compile.builders.tvm_ffi_builder import TVMFFIBuilder
+
+    monkeypatch.setenv("FIB_CACHE_PATH", str(tmp_path))
+    monkeypatch.delenv("PYTORCH_ROCM_ARCH", raising=False)
+    monkeypatch.delenv("TORCH_CUDA_ARCH_LIST", raising=False)
+    solution = Solution(
+        name="sol",
+        definition="def",
+        author="ut",
+        spec=BuildSpec(
+            language=SupportedLanguages.CUDA, target_hardware=["rocm"], entry_point="k.cu::run"
+        ),
+        sources=[SourceFile(path="k.cu", content="// kernel")],
+    )
+    builder = TVMFFIBuilder()
+
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx942")
+    name_942, path_942 = builder._get_package_name_and_build_path(solution)
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx950")
+    name_950, path_950 = builder._get_package_name_and_build_path(solution)
+
+    # Same solution, so the same package name -- only the target segment may differ.
+    assert name_942 == name_950
+    assert path_942 != path_950
+    assert "gfx942" in str(path_942) and "gfx950" in str(path_950)
+
+
+def test_python_builder_cache_stays_target_independent(monkeypatch, tmp_path):
+    """PythonBuilder only stages source, so its cache must stay portable across machines."""
+    from flashinfer_bench.compile.builders.python_builder import PythonBuilder
+
+    monkeypatch.setenv("FIB_CACHE_PATH", str(tmp_path))
+    solution = Solution(
+        name="sol",
+        definition="def",
+        author="ut",
+        spec=BuildSpec(
+            language=SupportedLanguages.PYTHON, target_hardware=["rocm"], entry_point="main.py::run"
+        ),
+        sources=[SourceFile(path="main.py", content="def run():\n    return 1\n")],
+    )
+    builder = PythonBuilder()
+
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx942")
+    _, path_942 = builder._get_package_name_and_build_path(solution)
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx950")
+    _, path_950 = builder._get_package_name_and_build_path(solution)
+
+    assert path_942 == path_950
