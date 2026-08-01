@@ -1,6 +1,6 @@
 import importlib.util
 from pathlib import Path
-from typing import List
+from typing import List, Sequence
 
 import pytest
 
@@ -44,8 +44,30 @@ def _flashinfer_available() -> bool:
         return False
 
 
+def _missing_flashinfer_apis(names: Sequence[str]) -> List[str]:
+    """Return the subset of ``names`` that the installed flashinfer does not expose.
+
+    ``flashinfer`` being installed does not mean it implements the whole upstream API: the ROCm
+    build (``amd-flashinfer``) ships a subset, so e.g. ``flashinfer.mla`` is absent there while
+    the NVIDIA package has it. Tests that reach for such an API need a skip keyed on the attribute
+    rather than on the package, otherwise they fail on every AMD box.
+
+    This uses ``hasattr`` on the imported package on purpose — that is exactly what the tests do
+    (``import flashinfer`` then ``flashinfer.mla...``), so it stays true to whether the test can
+    actually run, including for submodules that ``__init__`` chooses not to re-export.
+
+    An import failure returns no missing names, so a broken install fails its tests instead of
+    silently skipping them — the same tradeoff ``_flashinfer_available`` documents.
+    """
+    try:
+        import flashinfer
+    except Exception:
+        return []
+    return [name for name in names if not hasattr(flashinfer, name)]
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: List[pytest.Item]) -> None:
-    """Skip tests whose environment prerequisites (CUDA, flashinfer) are unavailable."""
+    """Skip tests whose environment prerequisites (CUDA, flashinfer, flashinfer APIs) are absent."""
     skip_cuda = (
         None
         if _torch_cuda_available()
@@ -56,14 +78,24 @@ def pytest_collection_modifyitems(config: pytest.Config, items: List[pytest.Item
         if _flashinfer_available()
         else pytest.mark.skip(reason="flashinfer (amd-flashinfer on ROCm) not installed")
     )
-    if skip_cuda is None and skip_flashinfer is None:
-        return
-
     for item in items:
         if skip_cuda is not None and any(item.iter_markers(name="requires_torch_cuda")):
             item.add_marker(skip_cuda)
         if skip_flashinfer is not None and any(item.iter_markers(name="requires_flashinfer")):
             item.add_marker(skip_flashinfer)
+            # The package is absent, so probing it for individual APIs would only import-fail.
+            continue
+        for marker in item.iter_markers(name="requires_flashinfer_api"):
+            missing = _missing_flashinfer_apis(marker.args)
+            if missing:
+                item.add_marker(
+                    pytest.mark.skip(
+                        reason=(
+                            "installed flashinfer does not provide: "
+                            f"{', '.join(f'flashinfer.{name}' for name in missing)}"
+                        )
+                    )
+                )
 
 
 @pytest.fixture
