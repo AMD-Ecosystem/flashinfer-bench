@@ -76,6 +76,15 @@ class Evaluator(ABC):
         log_path: str,
         device: str,
     ) -> Evaluation:
+        # Fail here rather than deep inside compute_error_stats. An unresolved BenchmarkConfig
+        # duck-types well enough to get this far, but leaves atol/rtol as None, which surfaces
+        # as "TypeError: '>' not supported between instances of 'Tensor' and 'NoneType'" with
+        # no hint that the real mistake was skipping cfg.resolve_eval_config(definition).
+        if not isinstance(cfg, ResolvedEvalConfig):
+            raise TypeError(
+                f"cfg must be a ResolvedEvalConfig, got {type(cfg).__name__}. "
+                "Call BenchmarkConfig.resolve_eval_config(definition) first."
+            )
         correctness, evaluation = cls.check_correctness(
             definition=definition,
             sol_runnable=sol_runnable,

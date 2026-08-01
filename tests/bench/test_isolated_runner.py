@@ -8,6 +8,7 @@ import safetensors.torch as st
 import torch
 
 from flashinfer_bench.bench import BenchmarkConfig
+from flashinfer_bench.bench.config import ResolvedEvalConfig
 from flashinfer_bench.bench.runner import IsolatedRunner
 from flashinfer_bench.bench.runner.isolated_runner import SubprocessWorker
 from flashinfer_bench.bench.utils import (
@@ -146,7 +147,9 @@ def test_load_safetensors_and_gen_inputs_cpu(tmp_path: Path):
 
 
 def test_compute_error_stats():
-    cfg = BenchmarkConfig(
+    # compute_error_stats takes a ResolvedEvalConfig; build one directly rather than a
+    # BenchmarkConfig, whose eval fields are Optional and default to None.
+    cfg = ResolvedEvalConfig(
         warmup_runs=0, iterations=1, num_trials=1, rtol=float(1e-2), atol=float(1e-2)
     )
 
