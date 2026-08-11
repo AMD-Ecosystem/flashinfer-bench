@@ -245,6 +245,81 @@ def test_cuda_add_one() -> None:
     torch.testing.assert_close(output_tensor, expected, rtol=1e-5, atol=1e-5)
 
 
+CUDA_HEADER_SOURCE = """
+#pragma once
+#include <cuda_runtime.h>
+
+__device__ inline float add_one_value(float v) { return v + 1.0f; }
+
+inline void sync_device() { cudaDeviceSynchronize(); }
+"""
+
+CUDA_USES_HEADER_SOURCE = """
+#include <util.cuh>
+#include <tvm/ffi/container/tensor.h>
+#include <tvm/ffi/error.h>
+#include <tvm/ffi/function.h>
+
+__global__ void add_one_hdr_kernel(const float* input, float* output, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        output[idx] = add_one_value(input[idx]);
+    }
+}
+
+void add_one_hdr(tvm::ffi::TensorView x, tvm::ffi::TensorView output) {
+    int n = x.size(0);
+    int threads = 256;
+    int blocks = (n + threads - 1) / threads;
+    add_one_hdr_kernel<<<blocks, threads>>>(
+        static_cast<const float*>(x.data_ptr()),
+        static_cast<float*>(output.data_ptr()),
+        n
+    );
+    sync_device();
+}
+
+TVM_FFI_DLL_EXPORT_TYPED_FUNC(add_one_hdr, add_one_hdr);
+"""
+
+
+@pytest.mark.requires_torch_cuda
+def test_cuda_solution_with_own_header() -> None:
+    """A solution header pulled in with ``#include <...>`` must resolve to the hipified copy.
+
+    hipify-perl rewrites include *contents* but not include *paths*, so the hipified sources still
+    say ``#include <util.cuh>``. The build adds ``-I`` for both the build directory (originals) and
+    ``_hipified/``, and ``-I`` is searched left to right — with the originals first, hipcc gets the
+    un-hipified header and dies on ``cuda_runtime.h``/``cudaDeviceSynchronize`` even though the
+    header itself was hipified correctly.
+    """
+    solution = Solution(
+        name="test_add_one_cuda_hdr",
+        definition=ADD_ONE_DEFINITION.name,
+        author="test",
+        spec=BuildSpec(
+            language=SupportedLanguages.CUDA,
+            target_hardware=["cuda"],
+            entry_point="kernel.cu::add_one_hdr",
+        ),
+        sources=[
+            SourceFile(path="util.cuh", content=CUDA_HEADER_SOURCE),
+            SourceFile(path="kernel.cu", content=CUDA_USES_HEADER_SOURCE),
+        ],
+        description="CUDA kernel that includes its own header",
+    )
+
+    builder = TVMFFIBuilder()
+    runnable = builder.build(ADD_ONE_DEFINITION, solution)
+
+    n = 1024
+    input_tensor = torch.randn(n, device="cuda", dtype=torch.float32)
+    output_tensor = torch.empty_like(input_tensor)
+    runnable(input_tensor, output_tensor)
+
+    torch.testing.assert_close(output_tensor, input_tensor + 1.0, rtol=1e-5, atol=1e-5)
+
+
 def test_can_build() -> None:
     """Test that TVMFFIBuilder can build CUDA solutions."""
     builder = TVMFFIBuilder()

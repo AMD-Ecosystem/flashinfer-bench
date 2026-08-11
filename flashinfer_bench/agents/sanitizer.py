@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List, Literal, Optional, Union
+from typing import List, Literal, Optional, Tuple, Union
 
 from flashinfer_bench.data import Solution, TraceSet, Workload
 
@@ -67,8 +67,20 @@ def _xnack_status(run_env) -> str:
 
 def _run_memcheck(
     data_dir: Path, device: str, trace_set_path: Optional[Path], timeout: int, env
-) -> str:
-    """Best-effort memcheck: run the solution and detect GPU memory faults."""
+) -> Tuple[str, str]:
+    """Best-effort memcheck: run the solution and detect GPU memory faults.
+
+    Returns
+    -------
+    log : str
+        The runner's stdout/stderr and return code. Unbounded (hundreds of lines for a JIT build);
+        the caller is what truncates it.
+    verdict : str
+        The conclusion — "MEMCHECK: ..." lines, or an "ERROR:"-prefixed tool failure. Returned
+        *separately* from ``log`` so truncation can never drop it: ``truncate`` keeps the FIRST
+        lines, so a verdict appended to a chatty log would be cut off entirely and a detected
+        memory fault would come back looking like an ordinary build log.
+    """
     cmd = [
         sys.executable,
         "-u",
@@ -91,24 +103,23 @@ def _run_memcheck(
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, env=run_env, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return f"ERROR: memcheck run timed out after {timeout} seconds."
+        return "", f"ERROR: memcheck run timed out after {timeout} seconds."
     except Exception as e:  # e.g. the runner failed to launch (exec/permission)
-        return f"ERROR: memcheck failed to launch the solution runner: {e}"
+        return "", f"ERROR: memcheck failed to launch the solution runner: {e}"
 
-    combined = f"STDOUT:\n{r.stdout}\n\nSTDERR:\n{r.stderr}\nReturn code: {r.returncode}\n"
+    log = f"STDOUT:\n{r.stdout}\n\nSTDERR:\n{r.stderr}\nReturn code: {r.returncode}\n"
     faults = [s for s in _MEM_FAULT_SIGNATURES if s.lower() in (r.stdout + r.stderr).lower()]
     if faults:
-        return combined + f"\nMEMCHECK: FAIL — detected fault signatures: {faults}\n"
+        return log, f"\nMEMCHECK: FAIL — detected fault signatures: {faults}\n"
     if r.returncode != 0:
         # A non-zero exit with no fault signature is a build error, a bad device string, or a
         # Python exception in the runner — a tool failure, not a memcheck verdict. Reporting it
         # as "MEMCHECK: FAIL" would send an agent hunting for a memory bug that isn't there.
-        return (
+        return log, (
             f"ERROR: the solution runner exited with code {r.returncode} without any GPU "
-            f"memory-fault signature, so this is a run failure rather than a memcheck result.\n"
-            + combined
+            f"memory-fault signature, so this is a run failure rather than a memcheck result."
         )
-    return combined + (
+    return log, (
         "\nMEMCHECK: no GPU memory fault detected.\n"
         f"DETECTION: {_xnack_status(run_env)}\n"
         "NOTE: ROCm has no full compute-sanitizer equivalent; this only catches faults that abort "
@@ -149,7 +160,9 @@ def flashinfer_bench_run_sanitizer(
     tmpdir : str, optional
         Temporary directory.
     max_lines : int, optional
-        Truncate output to this many lines.
+        Truncate each check's runner log to this many lines. The verdict ("MEMCHECK: ..." or
+        "ERROR: ...") and the section headers are always kept, so no limit can hide a detected
+        fault.
 
     Returns
     -------
@@ -214,22 +227,20 @@ def flashinfer_bench_run_sanitizer(
                     "equivalent. Skipped. (memcheck is available as a best-effort fault detector.)\n"
                 )
                 continue
-            result = _run_memcheck(
+            log, verdict = _run_memcheck(
                 data_dir, device, Path(trace_set_path) if trace_set_path else None, timeout, env
             )
             # Preserve the agent-tool contract: an error must be returned as a string that
             # *starts* with "ERROR:", so short-circuit instead of burying it in section output.
-            if result.startswith("ERROR:"):
-                # Honour max_lines on this path too — the error embeds the runner's full
-                # stdout/stderr and can be very large. Only the body is truncated, so the
-                # "ERROR:" first line survives any limit (max_lines=0 included).
-                if max_lines is None:
-                    return result
-                header, _, body = result.partition("\n")
-                return f"{header}\n{truncate(body, max_lines)}" if body else header
-            out += result
+            if verdict.startswith("ERROR:"):
+                # Honour max_lines on this path too — the runner log can be very large. Only the
+                # log is truncated, so the "ERROR:" line survives any limit (max_lines=0 included).
+                return f"{verdict}\n{truncate(log, max_lines)}" if log else verdict
+            # Same reasoning for the success path: truncate only the log and keep the verdict
+            # whole. `truncate` keeps the FIRST lines, so folding the verdict into the truncated
+            # text would let a chatty run drop a "MEMCHECK: FAIL" and hand back a real memory
+            # fault as what reads like an ordinary build log.
+            out += truncate(log, max_lines) + verdict
 
         out += f"\n{'=' * 60}\nSanitizer checks complete\n{'=' * 60}\n"
-        if max_lines is not None:
-            out = truncate(out, max_lines)
         return out
