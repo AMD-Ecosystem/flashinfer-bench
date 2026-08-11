@@ -19,6 +19,11 @@ set -uo pipefail
 readonly PUSH_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+push([^[:alnum:]_-]|$)'
 # The documented trailer is `Review-response: #<PR>`; match that, number included.
 readonly TRAILER_RE='^Review-response:[[:space:]]*#[0-9]+'
+# `--all`/`--mirror` publish refs outside HEAD's range — other branches, and for --mirror the
+# remote-tracking refs and tags too. The range below cannot see them, so the gate would pass
+# judgment on one branch while a second branch's unreviewed commits rode along. Anchored after
+# `push` in the same segment so `git commit --all && git push` is not caught by it.
+readonly WIDE_PUSH_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+push[^;&|]*[[:space:]]--(all|mirror)([[:space:]]|=|$)'
 
 payload=$(cat)
 cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
@@ -42,8 +47,25 @@ deny() {
   exit 0
 }
 
+# Refuse the modes this gate cannot scope, rather than judging them by the wrong range.
+if grep -Eq "$WIDE_PUSH_RE" <<<"$cmd"; then
+  deny "This gate reasons about one range — the unpushed commits on HEAD — but \`--all\`/\`--mirror\`
+publish every matching ref, including branches (and for --mirror, tags and remote-tracking
+refs) whose commits it never examined.
+
+Refusing rather than reporting on the wrong set. Push the branch you mean by name:
+
+    git push origin <branch>"
+fi
+
 # What this push would publish. No upstream means a first push, so everything since the base
 # branch is new.
+#
+# Known limitation: `git push --tags` with no refspec publishes only tags, yet it still lands
+# here and is judged against HEAD's commit range — a deny that names commits the command would
+# not actually push. Left as is because parsing refspecs out of a shell string to tell that case
+# from `git push --tags origin main` is more fragility than the rare false deny is worth, and the
+# acknowledgement path below clears it in one command.
 if upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null); then
   range="$upstream..HEAD"
 else

@@ -116,6 +116,14 @@ restated in the block messages.
 which no hook here can see. Running `pre-commit install` is the better coverage; this hook's
 unique contribution is the debug-leftover scan and the agent-facing block message.
 
+`push-review-gate.sh` reasons about exactly one range — the unpushed commits on HEAD. Push modes
+that publish more than that are handled by refusing them: `--all` and `--mirror` are denied
+outright, with a message pointing at `git push origin <branch>`, because judging them by HEAD's
+range would let a second branch's unreviewed commits ride along unexamined. `git push --tags`
+publishes only tags but is still measured against HEAD's range, so it can deny while naming
+commits it would not push; the acknowledgement path clears that in one command, which is cheaper
+than parsing refspecs out of a shell string.
+
 A `"type": "agent"` hook could genuinely inspect the transcript for evidence of a review. At
 per-commit frequency that was too expensive to justify; at per-**push** frequency it is cheap —
 one model call per push. Worth revisiting if the acknowledgement proves too easy to rubber-stamp.

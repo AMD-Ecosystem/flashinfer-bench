@@ -89,8 +89,11 @@ added=""
 for scope in "${scopes[@]}"; do
   added+=$(git diff "$scope" -U0 --output-indicator-new='>' -- "${files[@]}" 2>/dev/null | grep '^>')$'\n'
 done
-if hits=$(grep -nE 'breakpoint\(\)|(^|[^[:alnum:]_.])pdb\.set_trace|console\.log\(|(^|[^[:alnum:]_])debugger;' <<<"$added" | sort -u -t: -k2); then
-  problems+=("debug leftovers in the staged diff:"$'\n'"$hits")
+#    No `grep -n`: the numbers would count lines of the concatenated scan buffer, not of the
+#    file or the diff, and a precise-looking wrong number is worse than none.
+if hits=$(grep -E 'breakpoint\(\)|(^|[^[:alnum:]_.])pdb\.set_trace|console\.log\(|(^|[^[:alnum:]_])debugger;' <<<"$added" | sort -u); then
+  # Strip the scan's `>` marker so the report shows each source line as written.
+  problems+=("debug leftovers in the staged diff:"$'\n'"$(sed 's/^>//' <<<"$hits")")
 fi
 
 ((${#problems[@]})) || exit 0
