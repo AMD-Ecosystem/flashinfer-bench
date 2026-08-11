@@ -81,11 +81,16 @@ def pytest_collection_modifyitems(config: pytest.Config, items: List[pytest.Item
     for item in items:
         if skip_cuda is not None and any(item.iter_markers(name="requires_torch_cuda")):
             item.add_marker(skip_cuda)
-        if skip_flashinfer is not None and any(item.iter_markers(name="requires_flashinfer")):
+        api_markers = list(item.iter_markers(name="requires_flashinfer_api"))
+        # requires_flashinfer_api implies requires_flashinfer: asking for an attribute of the
+        # package is asking for the package, so the marker stands on its own and a test need not
+        # carry both.
+        needs_flashinfer = api_markers or any(item.iter_markers(name="requires_flashinfer"))
+        if skip_flashinfer is not None and needs_flashinfer:
             item.add_marker(skip_flashinfer)
             # The package is absent, so probing it for individual APIs would only import-fail.
             continue
-        for marker in item.iter_markers(name="requires_flashinfer_api"):
+        for marker in api_markers:
             missing = _missing_flashinfer_apis(marker.args)
             if missing:
                 item.add_marker(
