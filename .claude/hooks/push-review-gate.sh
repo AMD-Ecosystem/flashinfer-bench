@@ -8,7 +8,7 @@
 #
 # Two deliberate exemptions, both fail-closed (a missed signal means an extra review, never a
 # skipped one):
-#   1. Every new commit carries a `Review-response:` trailer — these answer an automated review
+#   1. Every new commit carries a `Review-response: #<PR>` trailer — these answer an automated review
 #      that already scrutinised the code, so re-reviewing them is busywork.
 #   2. This exact head SHA was already acknowledged. Keyed to the SHA, so appending commits
 #      after a review re-arms the gate rather than riding on the old acknowledgement.
@@ -17,6 +17,8 @@ set -uo pipefail
 # POSIX ERE only — `\b` is a GNU/ugrep extension, and a matcher that quietly fails to match is a
 # gate that quietly does not gate. See the fuller note in commit-quality-gate.sh.
 readonly PUSH_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+push([^[:alnum:]_-]|$)'
+# The documented trailer is `Review-response: #<PR>`; match that, number included.
+readonly TRAILER_RE='^Review-response:[[:space:]]*#[0-9]+'
 
 payload=$(cat)
 cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
@@ -63,9 +65,11 @@ fi
 [[ -n "$rev_out" ]] || exit 0   # genuinely nothing new to publish
 mapfile -t shas <<<"$rev_out"
 
-# Exemption 1 — the whole range answers an automated review.
+# Exemption 1 — the whole range answers an automated review. The PR number is required, not
+# decoration: a bare `Review-response:` is the shape a truncated or half-written trailer takes,
+# and honouring it would waive the gate on exactly the commit whose message was not finished.
 for s in "${shas[@]}"; do
-  git log -1 --format=%B "$s" 2>/dev/null | grep -qiE '^Review-response:' || { unreviewed=1; break; }
+  git log -1 --format=%B "$s" 2>/dev/null | grep -qiE "$TRAILER_RE" || { unreviewed=1; break; }
 done
 [[ -z "${unreviewed:-}" ]] && exit 0
 

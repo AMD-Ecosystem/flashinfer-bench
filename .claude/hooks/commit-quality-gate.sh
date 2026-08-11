@@ -19,8 +19,11 @@ set -uo pipefail
 #   git([[:space:]]+…)? optional global flags, e.g. `git -C sub commit`
 #   ([^[:alnum:]_-]|$)  right boundary, so `git commitfoo` does not match
 readonly COMMIT_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+commit([^[:alnum:]_-]|$)'
-# `a` may sit anywhere in a short-option cluster: -a, -am, -ma are all "commit all".
-readonly COMMIT_ALL_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+(-[[:alnum:]]*a[[:alnum:]]*|--all)([[:space:]]|$)'
+# `a` may sit anywhere in a short-option cluster: -a, -am, -ma are all "commit all". The right
+# boundary is `[^[:alnum:]_-]` rather than whitespace because the cluster can butt straight up
+# against the message quote — `git commit -am"msg"` is valid and must not read as index-only.
+# `--amend`/`--author` stay excluded: the alternative needs a space before its leading `-`.
+readonly COMMIT_ALL_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+(-[[:alnum:]]*a[[:alnum:]]*|--all)([^[:alnum:]_-]|$)'
 
 payload=$(cat)
 cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
