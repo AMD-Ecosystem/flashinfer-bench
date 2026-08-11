@@ -1,0 +1,42 @@
+name: Package build
+
+# Packaging smoke test: does an sdist/wheel still build and pass metadata validation?
+#
+# This is deliberately build-only — there is no upload job, no `release` trigger, and no secrets.
+# This fork does not publish to PyPI (the upstream publish job was dropped with the rest of
+# build-and-upload-pypi.yml).
+#
+# It is worth keeping as a check because packaging breaks independently of the test suite: the
+# fork rewrote dependencies and extras, dropped a git submodule, and removed licenses/. Any of
+# those can produce a broken sdist while every test still passes. With no GPU CI wired up here,
+# the CPU-side checks are the only automated safety net.
+#
+# No network access to AMD's package indexes is needed: build isolation installs only the
+# `[build-system] requires` (setuptools, setuptools-scm, wheel) from PyPI, never the project's
+# runtime dependencies.
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - amd-integration
+
+jobs:
+  build:
+    name: Build sdist and wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # setuptools-scm derives the version from git history; a shallow clone silently
+          # degrades it to the fallback_version.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build and check distributions
+        run: |
+          pipx run build
+          pipx run twine check dist/*
