@@ -1,5 +1,6 @@
 """Tests for compile/utils.py."""
 
+import logging
 import sys
 
 import pytest
@@ -259,6 +260,37 @@ def test_native_builders_key_off_their_own_arch_env(monkeypatch, tmp_path):
     # ... while TVM-FFI is unmoved by it, since its own arch did not change.
     assert tvm_942 == tvm_still_942
     assert "gfx942" in str(tvm_942)
+
+
+def test_get_build_target_tag_ignores_blank_env_values(monkeypatch):
+    """A whitespace-only value must not count as "set".
+
+    It sanitizes away to nothing, so treating it as set tagged the build with the bare backend
+    name -- putting two unrelated targets in the same `hip` directory.
+    """
+    monkeypatch.delenv("TVM_FFI_CUDA_ARCH_LIST", raising=False)
+    monkeypatch.delenv("TORCH_CUDA_ARCH_LIST", raising=False)
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "   ")
+    monkeypatch.setenv("PYTORCH_ROCM_ARCH", "gfx950")
+
+    # The blank entry is skipped, so the next populated var decides the tag.
+    assert get_build_target_tag() == "hip_gfx950"
+
+
+def test_get_build_target_tag_skips_unknown_env_name(monkeypatch, caplog):
+    """An unmappable env var warns and is skipped, rather than raising KeyError.
+
+    Reachable only via a `_target_env_names()` override, but a KeyError from inside a cache-path
+    computation is an unhelpful way to surface a typo.
+    """
+    monkeypatch.setenv("FIB_NOT_AN_ARCH_VAR", "gfx942")
+    monkeypatch.setenv("PYTORCH_ROCM_ARCH", "gfx942")
+
+    with caplog.at_level(logging.WARNING):
+        tag = get_build_target_tag(("FIB_NOT_AN_ARCH_VAR", "PYTORCH_ROCM_ARCH"))
+
+    assert tag == "hip_gfx942"
+    assert "FIB_NOT_AN_ARCH_VAR" in caplog.text
 
 
 if __name__ == "__main__":

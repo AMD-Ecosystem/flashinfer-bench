@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from flashinfer_bench.data import Solution, SourceFile
+
+logger = logging.getLogger(__name__)
 
 # Backend prefix per arch env var. The two toolchains read *different* variables: torch's
 # cpp_extension honours PYTORCH_ROCM_ARCH / TORCH_CUDA_ARCH_LIST, while tvm-ffi honours
@@ -58,9 +61,23 @@ def get_build_target_tag(env_names: Sequence[str] = DEFAULT_ARCH_ENV_NAMES) -> s
         target can be determined.
     """
     for env_name in env_names:
-        value = os.environ.get(env_name)
+        backend = _ARCH_ENV_BACKENDS.get(env_name)
+        if backend is None:
+            # Don't raise: this is reachable only from a _target_env_names() override, and a
+            # KeyError surfacing from inside a cache-path computation is a poor way to report it.
+            # Falling through to device detection is safe on the machine that will run the code,
+            # but wrong when cross-compiling -- hence the warning rather than a silent skip.
+            logger.warning(
+                "Ignoring unknown arch env var %r; expected one of %s",
+                env_name,
+                sorted(_ARCH_ENV_BACKENDS),
+            )
+            continue
+        # Strip before the emptiness test: a whitespace-only value sanitizes away to nothing, so
+        # treating it as "set" would tag every such target with the bare backend name.
+        value = os.environ.get(env_name, "").strip()
         if value:
-            return _make_target_tag(_ARCH_ENV_BACKENDS[env_name], value)
+            return _make_target_tag(backend, value)
 
     detected = _detect_device_target()
     return _make_target_tag(*detected) if detected else "unknown"
