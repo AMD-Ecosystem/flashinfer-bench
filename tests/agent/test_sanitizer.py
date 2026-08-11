@@ -157,6 +157,48 @@ def test_run_sanitizer_error_path_honours_max_lines():
     assert len(out.split("\n")) <= 5
 
 
+@pytest.mark.parametrize("max_lines", [None, 0, 5])
+def test_run_sanitizer_reports_detected_fault(monkeypatch, max_lines):
+    """A detected GPU memory fault must be reported, and must survive any max_lines.
+
+    Two regressions are guarded here. First, the MEMCHECK: FAIL path has no other coverage — a
+    sanitizer that could never report a fault would otherwise pass the whole suite. Second,
+    ``truncate`` keeps the FIRST lines, so a verdict appended to a chatty runner log gets cut off
+    and a real memory fault comes back reading like an ordinary build log.
+
+    The fault is synthesized (no GPU needed): the detector only greps the runner's output for
+    ``_MEM_FAULT_SIGNATURES``.
+    """
+    import subprocess
+
+    from flashinfer_bench.agents import sanitizer as sanitizer_mod
+
+    noisy_log = "\n".join(f"[{i}/200] building some_kernel.hip.o" for i in range(200))
+    # Realistic shape of a HIP fault: the runtime prints to stderr and the process aborts.
+    fault_stderr = (
+        "Memory access fault by GPU node-2 (Agent handle: 0x5) on address 0x7f00. "
+        "Reason: Page not present or supervisor privilege."
+    )
+
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 134, stdout=noisy_log, stderr=fault_stderr)
+
+    monkeypatch.setattr(sanitizer_mod.subprocess, "run", fake_run)
+
+    with tempfile.TemporaryDirectory() as d:
+        solution, workload = _make_dataset(Path(d))
+        out = flashinfer_bench_run_sanitizer(
+            solution, workload, trace_set_path=d, sanitizer_types=["memcheck"], max_lines=max_lines
+        )
+
+    # A fault signature outranks the non-zero exit code: this is a verdict, not a run failure.
+    assert not out.startswith("ERROR:")
+    assert "MEMCHECK: FAIL" in out
+    assert "Memory access fault" in out
+    if max_lines is not None:
+        assert "more lines]" in out, "expected the runner log to actually be truncated"
+
+
 @pytest.mark.requires_torch_cuda
 def test_run_sanitizer_memcheck_runs():
     with tempfile.TemporaryDirectory() as d:

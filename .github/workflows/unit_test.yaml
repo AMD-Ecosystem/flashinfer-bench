@@ -3,7 +3,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - amd-integration
 
 jobs:
   run_unit_test:

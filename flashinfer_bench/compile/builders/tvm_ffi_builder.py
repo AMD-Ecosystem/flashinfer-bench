@@ -364,7 +364,15 @@ class TVMFFIBuilder(Builder):
                         # .so cache check; compilation uses the hipified copies.
                         hipified_paths = self._hipify_sources(src_paths, build_path)
                         cpp_files, cuda_files = self._filter_sources(hipified_paths)
-                        extra_include_paths.append(str(build_path / "_hipified"))
+                        # Prepend, don't append: -I paths are searched left to right, and
+                        # hipify-perl rewrites include *contents* but not include *paths*. With
+                        # build_path first, `#include <util.cuh>` (or a quoted include from a
+                        # subdirectory) resolves to the ORIGINAL, un-hipified header, so
+                        # cuda_runtime.h / cudaStream_t reach hipcc untranslated and the build
+                        # fails confusingly even though the header was hipified. build_path stays
+                        # behind it as the fallback for when hipify-perl is missing and
+                        # _hipified/ was never written.
+                        extra_include_paths.insert(0, str(build_path / "_hipified"))
                         # tvm-ffi links the HIP runtime (libamdhip64) itself, so we add no GPU-runtime
                         # flags. When a solution declares a BLAS dependency we add hipBLAS/rocBLAS
                         # (the ROCm equivalents of cuBLAS). hipify rewrites <cublas_v2.h> to
