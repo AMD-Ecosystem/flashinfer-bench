@@ -53,7 +53,12 @@ def _lowbit_def(n: int = 4) -> Definition:
 
 @pytest.fixture(autouse=True)
 def _patch_time_runnable(monkeypatch: pytest.MonkeyPatch):
+    # The solution path uses time_runnable_detailed (latency, dispatch_bound); the reference path
+    # still uses the plain float API. Stub both, or these tests fall through to real GPU timing.
     monkeypatch.setattr(default_eval_module, "time_runnable", lambda *args, **kwargs: 1.0)
+    monkeypatch.setattr(
+        default_eval_module, "time_runnable_detailed", lambda *args, **kwargs: (1.0, False)
+    )
     monkeypatch.setattr(sampling_eval_module, "time_runnable", lambda *args, **kwargs: 1.0)
 
 
@@ -148,7 +153,7 @@ class TestDefaultEvaluatorDPS:
         def failing_timer(*args, **kwargs):
             raise RuntimeError("perf failure")
 
-        monkeypatch.setattr(default_eval_module, "time_runnable", failing_timer)
+        monkeypatch.setattr(default_eval_module, "time_runnable_detailed", failing_timer)
         definition = _simple_def()
         cfg = BenchmarkConfig(num_trials=1, warmup_runs=0, iterations=1)
         device = "cuda:0"

@@ -11,7 +11,7 @@ import torch
 from flashinfer_bench.bench.config import ResolvedEvalConfig
 from flashinfer_bench.bench.evaluators.evaluator import Evaluator
 from flashinfer_bench.bench.runner.runner import BaselineHandle, DeviceBaseline
-from flashinfer_bench.bench.timing import time_runnable
+from flashinfer_bench.bench.timing import time_runnable, time_runnable_detailed
 from flashinfer_bench.bench.utils import (
     compute_error_stats,
     gen_inputs,
@@ -188,6 +188,7 @@ class DefaultEvaluator(Evaluator):
         device: str,
     ) -> Tuple[Performance, Optional[Evaluation]]:
         sol_latencies: List[float] = []
+        dispatch_bound = False
         is_dps = sol_runnable.metadata.destination_passing_style
 
         try:
@@ -199,8 +200,13 @@ class DefaultEvaluator(Evaluator):
                 else:
                     # Value-returning style
                     args = list(inp)
-                ms = time_runnable(sol_runnable, args, cfg.warmup_runs, cfg.iterations, device)
+                ms, inp_dispatch_bound = time_runnable_detailed(
+                    sol_runnable, args, cfg.warmup_runs, cfg.iterations, device
+                )
                 sol_latencies.append(ms)
+                # Sticky across inputs: one contaminated workload is enough to make the mean, and
+                # therefore the speedup, untrustworthy.
+                dispatch_bound = dispatch_bound or inp_dispatch_bound
         except Exception:
             traceback.print_exc()
             return None, make_eval(
@@ -218,6 +224,7 @@ class DefaultEvaluator(Evaluator):
             latency_ms=sol_mean_latency_ms,
             reference_latency_ms=ref_mean_latency_ms,
             speedup_factor=(ref_mean_latency_ms / sol_mean_latency_ms),
+            dispatch_bound=dispatch_bound,
         )
 
         return performance, None

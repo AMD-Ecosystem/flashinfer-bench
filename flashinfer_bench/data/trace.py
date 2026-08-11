@@ -49,6 +49,16 @@ class Performance(BaseModelWithDocstrings):
     """Reference implementation latency in milliseconds for comparison."""
     speedup_factor: float = Field(default=0.0, ge=0.0)
     """Performance speedup factor compared to reference (reference_time / solution_time)."""
+    dispatch_bound: bool = False
+    """True when ``latency_ms`` is an upper bound rather than a certified kernel cost.
+
+    Set either because the timed window demonstrably included host dispatch time (a solution whose
+    per-call Python overhead exceeds the device work queued ahead of the measurement), or because
+    the harness could not run the check that would rule that out -- for example with the cache
+    flush disabled, or with too little free device memory to re-measure. Consumers should treat it
+    as "not certified" rather than "definitely inflated"; either way, speedups against a reference
+    that is not dispatch-bound are not comparable. See ``flashinfer_bench.bench.timing``. Defaults
+    to False, so existing traces deserialize unchanged."""
 
 
 class Environment(BaseModelWithDocstrings):
