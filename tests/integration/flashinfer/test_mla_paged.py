@@ -27,7 +27,11 @@ from flashinfer_bench.data import (
 # These modules call into `flashinfer` (amd-flashinfer on ROCm), an optional extra rather
 # than a hard dependency. tests/conftest.py skips this marker when the package is not
 # installed; an installed-but-broken flashinfer is left to fail rather than skip.
-pytestmark = pytest.mark.requires_flashinfer
+#
+# MLA additionally needs `flashinfer.mla`, which amd-flashinfer does not ship (it is an
+# NVIDIA-only API as of amd-flashinfer 0.5.3). Package presence alone is not enough here, so
+# these tests are also keyed on the attribute; drop the second marker once ROCm gains MLA.
+pytestmark = [pytest.mark.requires_flashinfer, pytest.mark.requires_flashinfer_api("mla")]
 
 
 @pytest.mark.skipif(torch.cuda.device_count() == 0, reason="CUDA devices not available")

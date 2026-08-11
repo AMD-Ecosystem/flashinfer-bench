@@ -134,6 +134,8 @@ addopts = "-rA --durations=0 --ignore=3rdparty"
 markers = [
   "requires_torch_cuda: tests that require torch and CUDA available",
   "requires_flashinfer: tests that require the flashinfer package (amd-flashinfer on ROCm)",
+  "requires_flashinfer_api(*names): tests needing specific flashinfer attributes, e.g. 'mla', which amd-flashinfer does not ship; implies requires_flashinfer",
+  "slow: heavy tests, deselected by `-m 'not slow'`",
 ]
 log_cli = true
 log_cli_level = "INFO"
