@@ -117,7 +117,20 @@ gh api repos/AMD-Ecosystem/flashinfer-bench/pulls/<number> --method PATCH --fiel
 
 ## Before creating a PR: quality gate
 
-Run this gate on the branch's full diff before `gh pr create`, in order:
+Run this gate on the **branch's full diff** — `git diff origin/amd-integration...HEAD`, the
+cumulative diff a reviewer sees — not on the last commit. The two scopes catch different things:
+a per-commit pass cannot see a helper added in commit 2 that nothing uses by commit 6, an
+abstraction that drifted across commits, or naming that went inconsistent between them. Conversely,
+code added *and* removed within the branch never reaches this diff, so it is not this gate's
+problem.
+
+This is the last of the three gates in
+[CLAUDE.md](../../../CLAUDE.md#quality-gates-commit-push-pr) — commit (mechanical), push
+(simplify/self-review over the unpushed range), then this one, which adds the tests. By the time
+you reach it the diff has already been reviewed at least once, so what is genuinely new here is
+step 3.
+
+In order:
 
 1. **Simplify / make production-ready.** Review all changes on the branch and remove dead code,
    debug/scratch code, debug-only comments, and unused imports. Keep comments that carry real value
@@ -145,7 +158,45 @@ the parent feature branch.
 ## After creating a PR: handle the automated review
 
 If the repo has an automated reviewer (e.g. GitHub Copilot), run this loop after `gh pr create`
-before considering the PR done:
+before considering the PR done.
+
+### Arm the poller, and make it delete itself
+
+The review lands minutes after the push, so the loop below is not something to sit and wait on.
+Immediately after `gh pr create`, schedule it with `CronCreate`:
+
+- `cron: "3,10,17,24,31,38,45,52,59 * * * *"` — roughly every 7 minutes. Deliberately **off the
+  :00 and :30 marks**: every caller who asks for "every N minutes" lands on those, so staying off
+  them spreads load.
+- `recurring: true`, `durable: true` — a PR review outlives the session that opened it, and durable
+  jobs survive a restart.
+- The prompt **must name the PR number** and carry its own teardown:
+
+  > Check PR #N on AMD-Ecosystem/flashinfer-bench. Stop when **either** the PR is merged/closed,
+  > **or** the review is complete and addressed — every thread resolved, every suppressed finding
+  > closed by a top-level comment, and the newest review covering the current branch head. To
+  > stop: `CronList`, find the job whose prompt names PR #N, `CronDelete` it. Otherwise run the
+  > automated-review loop in the pr-workflow skill.
+
+**Stop when the review is addressed, not when the PR merges.** The review lands within minutes;
+once it is closed out, nothing left needs 7-minute granularity. Polling until merge on a PR that
+sits open for three days is ~600 invocations, essentially all of them no-ops. The merge condition
+stays as the other exit, for a PR merged or abandoned before its review was handled.
+
+Note the third clause — *newest review covers the current head*. Pushing fixes triggers a fresh
+review, so "all threads resolved" alone would stop the job one cycle early, right before the
+follow-up review arrives.
+
+**Self-deletion is the teardown mechanism — do not add a cleanup hook for it.** A merge performed in
+the GitHub web UI fires no local tool call, so nothing on this machine can observe it; a hook on
+`gh pr merge` would only catch the minority of merges done from the CLI. Putting both conditions
+inside the polled prompt makes them fire on every path. Two backstops sit behind it: recurring jobs
+auto-expire after 7 days, and `CronList` makes an orphaned job visible.
+
+`.claude/hooks/pr-created-review-poller.sh` (a `PostToolUse` hook on `gh pr create`) injects this
+instruction automatically once the PR exists, so it is not left to memory.
+
+The loop itself:
 
 1. **Wait for all comments to land.** The review is not instant — the reviewer posts a top-level
    review plus inline comments a short while after the PR (and after each later push). Poll until the
@@ -166,6 +217,19 @@ before considering the PR done:
 
 4. **Address the ones worth fixing**, commit, and push to the PR branch (with consent, per the
    ask-before-push rule above).
+
+   Tag these commits with a `Review-response: #<PR>` trailer:
+
+   ```
+   Fix off-by-one in the marker column
+
+   Review-response: #12
+   ```
+
+   The trailer exempts the commit from the push-time simplify/self-review gate — these commits
+   already came out of a review pass, so re-reviewing them is busywork. The exemption is
+   all-or-nothing over the unpushed range: mix in one untagged commit and the gate re-arms, which
+   is the correct fail-closed behaviour.
 
 5. **Resolve every thread**, with the right closure for each:
    - *Fixed* → reply citing the commit SHA, then resolve the thread.

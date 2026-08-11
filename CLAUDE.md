@@ -83,6 +83,29 @@ reserved for the accurate `rocprofv3`-CLI backend) and `FIB_L2_FLUSH_MB` (cold-L
 
 Full setup (container + bare-metal) is in [`rocm-setup`](.claude/skills/rocm-setup/SKILL.md).
 
+### Quality gates: commit, push, PR
+
+Three gates, each scoped to what it can actually see:
+
+| Gate | Scope | Checks |
+|---|---|---|
+| **Every commit** | staged diff | Lint (`pre-commit`) and no debug leftovers. Mechanical only. |
+| **Every push** | all unpushed commits | **Simplify** — no dead code, scratch code, debug-only comments, unused imports; keep comments carrying the *why*. **Self-review** for correctness. |
+| **Before a PR** | full branch diff | The above plus the relevant tests. See [`pr-workflow`](.claude/skills/pr-workflow/SKILL.md). |
+
+Simplify and self-review sit at **push**, not commit: mid-branch commits are too frequent for a
+judgment pass to be anything but noise, and reviewing one commit at a time cannot see across the
+set — a helper added in commit 2 and orphaned by commit 6 is only visible over the whole range.
+
+Commits whose message carries a `Review-response: #<PR>` trailer are **exempt from the push gate**.
+They answer an automated review that already scrutinised the code, so re-reviewing them is
+busywork. The exemption is all-or-nothing over the range: one untagged commit re-arms the gate.
+
+`.claude/hooks/` enforces the mechanical parts and blocks on failure. No script can verify that
+simplify and self-review actually happened, which is why they are stated here — in context every
+session — rather than only in a skill that may not be loaded. Activation is opt-in per checkout;
+see [`.claude/hooks/README.md`](.claude/hooks/README.md).
+
 ### Non-obvious ROCm gotchas
 
 - **Torch must be the AMD ROCm build** (from `repo.radeon.com`); a stray PyPI/CPU wheel breaks
@@ -92,8 +115,18 @@ Full setup (container + bare-metal) is in [`rocm-setup`](.claude/skills/rocm-set
   `flashinfer_bench.integration.aiter.is_aiter_available`.
 - **JIT `build.ninja` is only (re)written when missing** — changing env/flags is a silent no-op until
   you clear `~/.cache/flashinfer/`.
-- **`pytest -n auto` halves the physical GPU count** to avoid HSA/hipBLAS flakiness; `--reruns 2`
-  absorbs transient HIP flakiness; the `slow` marker gates heavy tests.
+- **`pytest -n auto` is xdist's plain CPU-count default** — nothing caps workers to the GPU count,
+  so on a single-GPU host a dozen workers share one device. Measured on gfx942/MI300X: `-n 1` is
+  stable (identical results across runs) at ~3m40s, while `-n 12` finishes in ~1m but produced one
+  spurious extra failure in roughly one run in three — always in the subprocess/CUDA-IPC-heavy
+  tests (`tests/serve`, `tests/bench/test_isolated_runner.py`), and `--reruns 2` does not always
+  absorb it. So parallel runs are fine for a quick loop, but **re-run a failure serially before
+  investigating it**, and prefer `-n 1` when you need a trustworthy verdict. `tools/gpu-lock` pins
+  a device on shared multi-GPU hosts. The `slow` marker is registered and `-m "not slow"` is in the
+  standard command, but no test is marked `slow` yet, so today it deselects nothing.
+- **`tests/serve` leaves a ~700 MB `core` + `core.gpu`** in the working directory on every run: it
+  terminates worker subprocesses that still hold CUDA IPC tensors. Reproducible, not a test
+  failure, and written as root inside the container.
 - **fp8 is `_fnuz` on CDNA** (`float8_e4m3fnuz` / `_e5m2fnuz`), not NVIDIA OCP `_fn` — a dtype/scale
   issue, not a tolerance one. See [`rocm-debug`](.claude/skills/rocm-debug/SKILL.md).
 
