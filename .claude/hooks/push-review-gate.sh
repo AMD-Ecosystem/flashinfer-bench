@@ -53,10 +53,14 @@ fi
 # Fail closed if the range cannot be resolved. Discarding the error and treating it as an empty
 # range would silently allow an unreviewed push whenever the base ref is missing locally — a
 # fresh clone that never fetched amd-integration, a renamed remote, a deleted upstream.
-if ! rev_out=$(git rev-list "$range" 2>&1); then
+if ! rev_out=$(git rev-list "$range" 2>/dev/null); then
+  # Stdout only above: folding stderr in would let a warning on an otherwise successful call
+  # (an ambiguous refname, say) enter the list as a bogus SHA, fail the trailer lookup, and
+  # deny a push that was fine. Re-run for the error text — the failure path is cold.
+  err=$(git rev-list "$range" 2>&1 >/dev/null)
   deny "Cannot determine what this push would publish — \`git rev-list $range\` failed:
 
-$rev_out
+${err:-(no error output)}
 
 Refusing rather than guessing: an unresolvable range must not read as \"nothing new\".
 Fetch the base (\`git fetch origin amd-integration\`) or set the branch upstream, then retry."

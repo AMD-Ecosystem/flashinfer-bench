@@ -81,9 +81,13 @@ fi
 # 2. Debug leftovers in added lines only — scanning whole files would flag pre-existing code the
 #    commit never touched. Deliberately narrow to stay false-positive free: bare `print(` is
 #    excluded because scripts/ uses it legitimately, and a gate that cries wolf gets disabled.
+#    `--output-indicator-new` (git >= 2.22) renames the added-line marker so it cannot collide
+#    with the `+++ b/path` header. Stripping `^+++` instead would drop any added line whose own
+#    content starts with `++` — `++i;` at column 0 renders as `+++i;` — and take whatever debug
+#    marker shares that line with it.
 added=""
 for scope in "${scopes[@]}"; do
-  added+=$(git diff "$scope" -U0 -- "${files[@]}" 2>/dev/null | grep '^+' | grep -v '^+++')$'\n'
+  added+=$(git diff "$scope" -U0 --output-indicator-new='>' -- "${files[@]}" 2>/dev/null | grep '^>')$'\n'
 done
 if hits=$(grep -nE 'breakpoint\(\)|(^|[^[:alnum:]_.])pdb\.set_trace|console\.log\(|(^|[^[:alnum:]_])debugger;' <<<"$added" | sort -u -t: -k2); then
   problems+=("debug leftovers in the staged diff:"$'\n'"$hits")
