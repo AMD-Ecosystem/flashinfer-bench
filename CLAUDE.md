@@ -83,6 +83,29 @@ reserved for the accurate `rocprofv3`-CLI backend) and `FIB_L2_FLUSH_MB` (cold-L
 
 Full setup (container + bare-metal) is in [`rocm-setup`](.claude/skills/rocm-setup/SKILL.md).
 
+### Quality gates: commit, push, PR
+
+Three gates, each scoped to what it can actually see:
+
+| Gate | Scope | Checks |
+|---|---|---|
+| **Every commit** | staged diff | Lint (`pre-commit`) and no debug leftovers. Mechanical only. |
+| **Every push** | all unpushed commits | **Simplify** — no dead code, scratch code, debug-only comments, unused imports; keep comments carrying the *why*. **Self-review** for correctness. |
+| **Before a PR** | full branch diff | The above plus the relevant tests. See [`pr-workflow`](.claude/skills/pr-workflow/SKILL.md). |
+
+Simplify and self-review sit at **push**, not commit: mid-branch commits are too frequent for a
+judgment pass to be anything but noise, and reviewing one commit at a time cannot see across the
+set — a helper added in commit 2 and orphaned by commit 6 is only visible over the whole range.
+
+Commits whose message carries a `Review-response: #<PR>` trailer are **exempt from the push gate**.
+They answer an automated review that already scrutinised the code, so re-reviewing them is
+busywork. The exemption is all-or-nothing over the range: one untagged commit re-arms the gate.
+
+`.claude/hooks/` enforces the mechanical parts and blocks on failure. No script can verify that
+simplify and self-review actually happened, which is why they are stated here — in context every
+session — rather than only in a skill that may not be loaded. Activation is opt-in per checkout;
+see [`.claude/hooks/README.md`](.claude/hooks/README.md).
+
 ### Non-obvious ROCm gotchas
 
 - **Torch must be the AMD ROCm build** (from `repo.radeon.com`); a stray PyPI/CPU wheel breaks
