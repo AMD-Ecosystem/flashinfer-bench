@@ -16,7 +16,12 @@ import pytest
 import torch
 
 from flashinfer_bench.bench import timing
-from flashinfer_bench.bench.timing import _l2_flush_mb, time_runnable, time_runnable_detailed
+from flashinfer_bench.bench.timing import (
+    _l2_flush_mb,
+    _resolve_backend,
+    time_runnable,
+    time_runnable_detailed,
+)
 
 requires_cuda = pytest.mark.skipif(
     not torch.cuda.is_available(), reason="CUDA/HIP device not available"
@@ -49,7 +54,7 @@ def test_l2_flush_mb_falls_back_on_garbage(monkeypatch):
 def test_unsupported_backend_raises(monkeypatch):
     monkeypatch.setenv("FIB_TIMING_BACKEND", "cupti")
     with pytest.raises(ValueError, match="Unsupported FIB_TIMING_BACKEND"):
-        time_runnable(lambda: None, [], 0, 1, "cuda:0")
+        _resolve_backend()
 
 
 def test_rocprof_backend_warns_on_every_call(monkeypatch, caplog):
@@ -58,14 +63,17 @@ def test_rocprof_backend_warns_on_every_call(monkeypatch, caplog):
     ``warnings.warn`` is deduplicated by the default filter, so in a long run only the first trace
     carried the notice and every later one silently reported wall-clock timings while the operator
     believed rocprofv3 kernel durations had been requested.
+
+    Exercises ``_resolve_backend`` rather than ``time_runnable`` so it runs on CPU-only CI, which
+    is the only CI this fork has: ``time_runnable`` enters ``torch.cuda.device(...)`` regardless of
+    how the measurement is stubbed.
     """
     monkeypatch.setenv("FIB_TIMING_BACKEND", "rocprof")
-    monkeypatch.setattr(timing, "_time_with_torch_events", lambda *a, **k: (1.0, False))
 
     with caplog.at_level(logging.WARNING, logger="flashinfer_bench.bench.timing"):
-        for _ in range(3):
-            time_runnable(lambda: None, [], 0, 1, "cuda:0")
+        backends = [_resolve_backend() for _ in range(3)]
 
+    assert backends == ["torch_events"] * 3
     assert sum("not implemented yet" in r.message for r in caplog.records) == 3
 
 
@@ -135,6 +143,37 @@ def test_python_heavy_solution_is_corrected_not_inflated(monkeypatch):
         f"latency {heavy_ms * 1000:.1f} us should be close to the kernel cost "
         f"{baseline_ms * 1000:.1f} us, not the ~200 us of per-call Python"
     )
+
+
+@requires_cuda
+def test_cover_oom_is_not_mistaken_for_convergence(monkeypatch):
+    """An allocation failure must never certify a latency.
+
+    If the escalated cover buffer OOMs, that pass silently runs with *less* cover, so it measures
+    no faster than the previous one -- and a naive convergence test reads "no improvement" as
+    "the device was never idle", marking an unverified latency clean. That is the exact failure
+    class this module exists to remove, arrived at from the opposite direction.
+    """
+    monkeypatch.delenv("FIB_L2_FLUSH_MB", raising=False)
+    device = "cuda:0"
+    x = torch.randn(4096, device=device)
+    out = torch.empty_like(x)
+
+    real_alloc = timing._alloc_cover_buffer
+
+    def alloc_fails_when_escalating(cover_mb, dev):
+        # Succeed for the configured size, fail for anything larger.
+        if cover_mb > _l2_flush_mb():
+            return None
+        return real_alloc(cover_mb, dev)
+
+    monkeypatch.setattr(timing, "_alloc_cover_buffer", alloc_fails_when_escalating)
+
+    _, dispatch_bound = time_runnable_detailed(
+        _make_runnable(0, x, out), [x], warmup=10, iters=40, device=device
+    )
+
+    assert dispatch_bound, "an OOM during escalation must leave the latency uncertified"
 
 
 @requires_cuda
