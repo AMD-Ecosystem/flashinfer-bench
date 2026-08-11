@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from flashinfer_bench.data import Solution, SourceFile
 
@@ -33,17 +33,17 @@ def get_build_target_tag() -> str:
     for env_name in ("TVM_FFI_ROCM_ARCH_LIST", "PYTORCH_ROCM_ARCH"):
         value = os.environ.get(env_name)
         if value:
-            return _sanitize_target_tag(f"hip-{value}")
+            return _make_target_tag("hip", value)
     value = os.environ.get("TORCH_CUDA_ARCH_LIST")
     if value:
-        return _sanitize_target_tag(f"cuda-{value}")
+        return _make_target_tag("cuda", value)
 
     detected = _detect_device_target()
-    return _sanitize_target_tag(detected) if detected else "unknown"
+    return _make_target_tag(*detected) if detected else "unknown"
 
 
-def _detect_device_target() -> Optional[str]:
-    """Return a ``hip-<gcnArch>`` / ``cuda-<sm>`` tag for the live device, or None."""
+def _detect_device_target() -> Optional[Tuple[str, str]]:
+    """Return a ``(backend, target)`` pair for the live device, or None."""
     try:
         import torch
 
@@ -54,13 +54,22 @@ def _detect_device_target() -> Optional[str]:
         return None
     gcn_arch = getattr(props, "gcnArchName", None)
     if gcn_arch:
-        return f"hip-{gcn_arch}"
-    return f"cuda-sm{props.major}{props.minor}"
+        return ("hip", gcn_arch)
+    return ("cuda", f"sm{props.major}{props.minor}")
 
 
-def _sanitize_target_tag(tag: str) -> str:
-    """Reduce a target tag to lowercase alphanumerics and underscores for use as a path segment."""
-    return re.sub(r"[^0-9a-zA-Z]+", "_", tag).strip("_").lower()
+def _make_target_tag(backend: str, target: str) -> str:
+    """Join a backend name and a raw target string into a filesystem-safe path segment.
+
+    ROCm feature suffixes carry a polarity that selects a *different* code object:
+    ``gfx942:xnack+`` and ``gfx942:xnack-`` are not interchangeable. So the polarity is spelled
+    out in words before punctuation is collapsed to underscores -- deleting it as punctuation
+    would map both variants onto one cache key and reintroduce the very stale-``.so`` failure
+    this tag exists to prevent. The same applies to CUDA's ``+PTX`` suffix.
+    """
+    target = target.replace("+", "_plus_").replace("-", "_minus_")
+    target = re.sub(r"[^0-9a-zA-Z]+", "_", target).strip("_").lower()
+    return f"{backend}_{target}" if target else backend
 
 
 def write_sources_to_path(path: Path, sources: List[SourceFile]) -> List[Path]:

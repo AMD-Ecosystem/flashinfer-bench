@@ -105,10 +105,6 @@ def test_create_package_name_deterministic():
     assert name1 != name3
 
 
-if __name__ == "__main__":
-    pytest.main(sys.argv)
-
-
 def test_get_build_target_tag_prefers_rocm_arch_env(monkeypatch):
     """TVM_FFI_ROCM_ARCH_LIST wins, since that is the arch the build actually honours."""
     monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx942")
@@ -143,8 +139,25 @@ def test_get_build_target_tag_is_filesystem_safe(monkeypatch):
 
     tag = get_build_target_tag()
 
-    assert tag == "hip_gfx942_sramecc_xnack"
+    assert tag == "hip_gfx942_sramecc_plus_xnack_minus"
     assert set(tag) <= set("abcdefghijklmnopqrstuvwxyz0123456789_")
+
+
+def test_get_build_target_tag_preserves_feature_polarity(monkeypatch):
+    """xnack+ and xnack- are distinct code objects, so they must not share a cache key.
+
+    Regression guard: sanitizing the tag by deleting punctuation collapsed both suffixes to a
+    bare 'xnack', which is exactly the wrong-binary-from-cache bug the tag exists to prevent.
+    """
+    monkeypatch.delenv("PYTORCH_ROCM_ARCH", raising=False)
+    monkeypatch.delenv("TORCH_CUDA_ARCH_LIST", raising=False)
+
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx942:xnack+")
+    xnack_on = get_build_target_tag()
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx942:xnack-")
+    xnack_off = get_build_target_tag()
+
+    assert xnack_on != xnack_off
 
 
 def test_native_builders_segregate_cache_by_target(monkeypatch, tmp_path):
@@ -203,3 +216,7 @@ def test_python_builder_cache_stays_target_independent(monkeypatch, tmp_path):
     _, path_950 = builder._get_package_name_and_build_path(solution)
 
     assert path_942 == path_950
+
+
+if __name__ == "__main__":
+    pytest.main(sys.argv)
