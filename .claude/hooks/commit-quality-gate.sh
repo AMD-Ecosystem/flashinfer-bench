@@ -19,11 +19,15 @@ set -uo pipefail
 #   git([[:space:]]+…)? optional global flags, e.g. `git -C sub commit`
 #   ([^[:alnum:]_-]|$)  right boundary, so `git commitfoo` does not match
 readonly COMMIT_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+commit([^[:alnum:]_-]|$)'
-# `a` may sit anywhere in a short-option cluster: -a, -am, -ma are all "commit all". The right
-# boundary is `[^[:alnum:]_-]` rather than whitespace because the cluster can butt straight up
-# against the message quote — `git commit -am"msg"` is valid and must not read as index-only.
-# `--amend`/`--author` stay excluded: the alternative needs a space before its leading `-`.
-readonly COMMIT_ALL_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+(-[[:alnum:]]*a[[:alnum:]]*|--all)([^[:alnum:]_-]|$)'
+# `a` may sit anywhere in a short-option cluster: -a, -am, -ma are all "commit all". Two
+# subtleties, each learned from a false result:
+#   - `commit` must appear before the option, in the same segment. Without it, the `-a` of
+#     `git branch -a && git commit -m x` reads as commit-all and the gate scans worktree changes
+#     the commit will not include — a false deny, and a gate that cries wolf gets switched off.
+#   - The right boundary is `[^[:alnum:]_-]`, not whitespace: a cluster can butt straight up
+#     against the message quote, and `git commit -am"msg"` must not read as index-only.
+# `--amend`/`--author` stay excluded either way — the alternative needs a space before its `-`.
+readonly COMMIT_ALL_RE='(^|[;&|])[[:space:]]*git([[:space:]]+[^;&|]*)?[[:space:]]+commit([[:space:]]+[^;&|]*)?[[:space:]]+(-[[:alnum:]]*a[[:alnum:]]*|--all)([^[:alnum:]_-]|$)'
 
 payload=$(cat)
 cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
