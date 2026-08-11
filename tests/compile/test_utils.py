@@ -218,5 +218,48 @@ def test_python_builder_cache_stays_target_independent(monkeypatch, tmp_path):
     assert path_942 == path_950
 
 
+def test_native_builders_key_off_their_own_arch_env(monkeypatch, tmp_path):
+    """Each builder must key its cache off the env var its own toolchain honours.
+
+    torch's cpp_extension derives --offload-arch from PYTORCH_ROCM_ARCH and ignores
+    TVM_FFI_ROCM_ARCH_LIST; tvm-ffi does the reverse. With one global precedence the Torch cache
+    was tagged with TVM-FFI's arch, so flipping PYTORCH_ROCM_ARCH alone left the path unchanged
+    and served the previous arch's .so -- the failure this tag exists to prevent.
+    """
+    from flashinfer_bench.compile.builders.torch_builder import TorchBuilder
+    from flashinfer_bench.compile.builders.tvm_ffi_builder import TVMFFIBuilder
+
+    monkeypatch.setenv("FIB_CACHE_PATH", str(tmp_path))
+    monkeypatch.delenv("TORCH_CUDA_ARCH_LIST", raising=False)
+    monkeypatch.delenv("TVM_FFI_CUDA_ARCH_LIST", raising=False)
+    solution = Solution(
+        name="sol",
+        definition="def",
+        author="ut",
+        spec=BuildSpec(
+            language=SupportedLanguages.CUDA, target_hardware=["rocm"], entry_point="k.cu::run"
+        ),
+        sources=[SourceFile(path="k.cu", content="// kernel")],
+    )
+    torch_builder, tvm_builder = TorchBuilder(), TVMFFIBuilder()
+
+    # Hold the TVM-FFI arch fixed and move only the arch torch actually compiles for.
+    monkeypatch.setenv("TVM_FFI_ROCM_ARCH_LIST", "gfx942")
+    monkeypatch.setenv("PYTORCH_ROCM_ARCH", "gfx942")
+    _, torch_942 = torch_builder._get_package_name_and_build_path(solution)
+    _, tvm_942 = tvm_builder._get_package_name_and_build_path(solution)
+
+    monkeypatch.setenv("PYTORCH_ROCM_ARCH", "gfx950")
+    _, torch_950 = torch_builder._get_package_name_and_build_path(solution)
+    _, tvm_still_942 = tvm_builder._get_package_name_and_build_path(solution)
+
+    # Torch follows PYTORCH_ROCM_ARCH ...
+    assert torch_942 != torch_950
+    assert "gfx950" in str(torch_950)
+    # ... while TVM-FFI is unmoved by it, since its own arch did not change.
+    assert tvm_942 == tvm_still_942
+    assert "gfx942" in str(tvm_942)
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)

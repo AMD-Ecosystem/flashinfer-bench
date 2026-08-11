@@ -5,13 +5,13 @@ from __future__ import annotations
 import inspect
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, Tuple
+from typing import Callable, Sequence, Tuple
 
 from flashinfer_bench.data import Definition, Solution
 from flashinfer_bench.env import get_fib_cache_path
 
 from .runnable import Runnable
-from .utils import create_package_name, get_build_target_tag
+from .utils import DEFAULT_ARCH_ENV_NAMES, create_package_name, get_build_target_tag
 
 
 class BuildError(RuntimeError):
@@ -117,6 +117,19 @@ class Builder(ABC):
         """
         return False
 
+    def _target_env_names(self) -> Sequence[str]:
+        """Arch env vars this builder's toolchain honours, in precedence order.
+
+        Only consulted when :meth:`_is_target_specific` is True. Each builder must list the
+        variables *its own* compiler reads, because they disagree: torch's ``cpp_extension``
+        derives ``--offload-arch`` from ``PYTORCH_ROCM_ARCH`` and ignores
+        ``TVM_FFI_ROCM_ARCH_LIST``, while tvm-ffi does the reverse. Keying every builder off one
+        global precedence would tag a Torch build with TVM-FFI's arch, so changing
+        ``PYTORCH_ROCM_ARCH`` alone would leave the path unchanged and hand the new arch the
+        previous arch's ``.so`` -- the exact failure the tag exists to prevent.
+        """
+        return DEFAULT_ARCH_ENV_NAMES
+
     def _get_package_name_and_build_path(self, solution: Solution) -> Tuple[str, Path]:
         """Get the package name and build path for the solution. The package name is a unique
         identifier for the solution with only alphanumeric characters and underscores. The
@@ -135,7 +148,7 @@ class Builder(ABC):
         package_name = create_package_name(solution, self._package_prefix)
         build_root = get_fib_cache_path() / self._build_dir_name
         if self._is_target_specific():
-            build_root = build_root / get_build_target_tag()
+            build_root = build_root / get_build_target_tag(self._target_env_names())
         return package_name, build_root / package_name
 
     def _try_validate_signature(

@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Callable, ClassVar, List, Optional, Tuple
+from typing import Callable, ClassVar, List, Optional, Sequence, Tuple
 
 from flashinfer_bench.compile.builder import Builder, BuildError
 from flashinfer_bench.compile.runnable import Runnable, RunnableMetadata
@@ -59,6 +59,10 @@ class TVMFFIBuilder(Builder):
     def _is_target_specific(self) -> bool:
         """True: hipcc/nvcc compile this solution for one ``--offload-arch``/``-arch`` target."""
         return True
+
+    def _target_env_names(self) -> Sequence[str]:
+        """tvm-ffi reads these; it ignores torch's own ``*_ARCH`` / ``*_ARCH_LIST`` variables."""
+        return ("TVM_FFI_ROCM_ARCH_LIST", "TVM_FFI_CUDA_ARCH_LIST")
 
     # BLAS dependency names a solution may declare (the CUDA name `cublas` is accepted and mapped).
     # Only hipBLAS/rocBLAS are linked below; hipBLASLt (a separate lib/header) is not wired yet.

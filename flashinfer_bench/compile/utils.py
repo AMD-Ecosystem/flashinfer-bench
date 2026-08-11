@@ -5,12 +5,31 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from flashinfer_bench.data import Solution, SourceFile
 
+# Backend prefix per arch env var. The two toolchains read *different* variables: torch's
+# cpp_extension honours PYTORCH_ROCM_ARCH / TORCH_CUDA_ARCH_LIST, while tvm-ffi honours
+# TVM_FFI_ROCM_ARCH_LIST / TVM_FFI_CUDA_ARCH_LIST and ignores torch's entirely. Builders therefore
+# pass the subset they actually honour -- see :meth:`Builder._target_env_names`.
+_ARCH_ENV_BACKENDS: Dict[str, str] = {
+    "TVM_FFI_ROCM_ARCH_LIST": "hip",
+    "PYTORCH_ROCM_ARCH": "hip",
+    "TVM_FFI_CUDA_ARCH_LIST": "cuda",
+    "TORCH_CUDA_ARCH_LIST": "cuda",
+}
 
-def get_build_target_tag() -> str:
+DEFAULT_ARCH_ENV_NAMES: Tuple[str, ...] = (
+    "TVM_FFI_ROCM_ARCH_LIST",
+    "PYTORCH_ROCM_ARCH",
+    "TVM_FFI_CUDA_ARCH_LIST",
+    "TORCH_CUDA_ARCH_LIST",
+)
+"""Fallback precedence for callers that are not tied to one toolchain."""
+
+
+def get_build_target_tag(env_names: Sequence[str] = DEFAULT_ARCH_ENV_NAMES) -> str:
     """Return a short tag identifying the GPU target native code is compiled for.
 
     Build caches are keyed on ``Solution.hash()``, which covers source and build spec but says
@@ -24,19 +43,24 @@ def get_build_target_tag() -> str:
     falling back to the live device's ``gcnArchName`` (which includes feature suffixes such as
     ``:xnack-``; code objects are built per xnack variant, so they belong in the key).
 
+    Parameters
+    ----------
+    env_names : Sequence[str], optional
+        Arch env vars to consult, in precedence order. Callers should pass only the variables
+        their own toolchain reads: a Torch build tagged with TVM-FFI's arch is worse than no tag,
+        because flipping ``PYTORCH_ROCM_ARCH`` alone would then leave the tag unchanged and serve
+        the previous arch's ``.so``.
+
     Returns
     -------
     str
         A filesystem-safe tag such as ``hip_gfx942`` or ``cuda_sm90``, or ``unknown`` when no
         target can be determined.
     """
-    for env_name in ("TVM_FFI_ROCM_ARCH_LIST", "PYTORCH_ROCM_ARCH"):
+    for env_name in env_names:
         value = os.environ.get(env_name)
         if value:
-            return _make_target_tag("hip", value)
-    value = os.environ.get("TORCH_CUDA_ARCH_LIST")
-    if value:
-        return _make_target_tag("cuda", value)
+            return _make_target_tag(_ARCH_ENV_BACKENDS[env_name], value)
 
     detected = _detect_device_target()
     return _make_target_tag(*detected) if detected else "unknown"
