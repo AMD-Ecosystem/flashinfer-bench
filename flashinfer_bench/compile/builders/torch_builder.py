@@ -7,7 +7,7 @@ import shutil
 import sys
 from importlib import resources
 from pathlib import Path
-from typing import Callable, ClassVar, Dict, List, Optional, Tuple
+from typing import Callable, ClassVar, Dict, List, Optional, Sequence, Tuple
 
 from flashinfer_bench.compile.builder import Builder, BuildError
 from flashinfer_bench.compile.runnable import Runnable, RunnableMetadata
@@ -37,6 +37,14 @@ class TorchBuilder(Builder):
     def __init__(self) -> None:
         """Initialize the TorchBuilder and discover available CUDA dependencies."""
         super().__init__(self._PACKAGE_PREFIX, self._BUILD_DIR_NAME)
+
+    def _is_target_specific(self) -> bool:
+        """True: this builder emits a ``.so`` compiled for one GPU target."""
+        return True
+
+    def _target_env_names(self) -> Sequence[str]:
+        """torch's ``cpp_extension`` reads these and ignores the ``TVM_FFI_*`` variables."""
+        return ("PYTORCH_ROCM_ARCH", "TORCH_CUDA_ARCH_LIST")
 
     @staticmethod
     def is_available() -> bool:

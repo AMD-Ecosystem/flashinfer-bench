@@ -32,11 +32,15 @@ dependencies = [
   # NOTE: the ROCm FlashInfer package (`amd-flashinfer`, imported as `flashinfer`) is only needed
   # for the flashinfer integration/apply path and lives on AMD's package index, so it is an
   # optional dependency under the `rocm` extra rather than a hard requirement.
-  # Range restored from what `flashinfer-python` used to impose transitively
-  # (!=0.1.8,!=0.1.8.post0,<0.2,>=0.1.6); dropping that dep silently left us on a bare >=0.1.2.
-  # The floor additionally matters on ROCm: HIP-backend auto-detection landed after 0.1.2 and
-  # docker/rocm/Dockerfile pins 0.1.12, so an older tvm-ffi compiles .cu via nvcc instead of hipcc.
-  "apache-tvm-ffi>=0.1.6,<0.2,!=0.1.8,!=0.1.8.post0",
+  # Upper bound restored from what `flashinfer-python` used to impose transitively (<0.2);
+  # dropping that dep silently left us on a bare >=0.1.2. The !=0.1.8/!=0.1.8.post0 exclusions it
+  # also carried are subsumed by the floor below and so are no longer spelled out.
+  # The floor is ROCm's, not theirs: HIP support first ships in 0.1.9. The 0.1.6 and 0.1.7 wheels
+  # contain no reference to hipcc, --offload-arch or ROCM_ARCH at all, so tvm-ffi routes every .cu
+  # through nvcc there and each C++/HIP solution fails to build. docker/rocm/Dockerfile pins
+  # 0.1.12; this floor is what stops a pre-existing 0.1.6/0.1.7 from satisfying the requirement
+  # and silently surviving `pip install -e .` on a ROCm box.
+  "apache-tvm-ffi>=0.1.9,<0.2",
   "docstring-parser>=0.16",
   "pyyaml>=6.0",
   # Imported unconditionally by flashinfer_bench.compile.registry. Reaches us transitively via
@@ -134,6 +138,8 @@ addopts = "-rA --durations=0 --ignore=3rdparty"
 markers = [
   "requires_torch_cuda: tests that require torch and CUDA available",
   "requires_flashinfer: tests that require the flashinfer package (amd-flashinfer on ROCm)",
+  "requires_flashinfer_api(*names): tests needing specific flashinfer attributes, e.g. 'mla', which amd-flashinfer does not ship; implies requires_flashinfer",
+  "slow: heavy tests, deselected by `-m 'not slow'`",
 ]
 log_cli = true
 log_cli_level = "INFO"
