@@ -90,8 +90,7 @@ describing the change:
 
 - ✅ `pr-workflow-push-safety`, `timing-torch-events`, `aiter-solution-generator`
 - ❌ **no `rocm/` prefix** — the entire fork is ROCm, so it's redundant noise.
-- ❌ **no plan-phase labels** (`p1`, `p2`, …) from `ROCM_PORT_PLAN.md` — name the *change*, not the
-  plan milestone.
+- ❌ **no plan-phase labels** (`p1`, `p2`, …) — name the *change*, not a milestone.
 
 ## CRITICAL: ask before pushing to remote (fail-closed)
 

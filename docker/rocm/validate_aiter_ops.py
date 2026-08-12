@@ -1,6 +1,6 @@
-"""P1 end-to-end proof: AITER-generated solutions for every supported op-type on ROCm.
+"""End-to-end proof: AITER-generated solutions for every supported op-type on ROCm.
 
-For each op-type the generator supports, builds an in-memory definition + workload, asks the §3.9
+For each op-type the generator supports, builds an in-memory definition + workload, asks the
 generator for the AITER-backed solution, and runs it through the real Benchmark loop (build → time →
 correctness → speedup) on the GPU.
 

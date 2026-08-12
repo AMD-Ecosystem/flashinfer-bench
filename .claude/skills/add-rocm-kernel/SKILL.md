@@ -13,8 +13,7 @@ know-how; the bench builders are the mechanism.
 
 Builders: `compile/builders/torch_builder.py` (auto-hipifies `.cu` via
 `torch.utils.cpp_extension.load`) and `compile/builders/tvm_ffi_builder.py` (`apache/tvm-ffi` has
-first-class HIP). Plan context: `ROCM_PORT_PLAN.md` §3.2, §3.3, §3.11. Agent kernel-gen guidance:
-`flashinfer_bench/agents/ffi_prompt.py`.
+first-class HIP). Agent kernel-gen guidance: `flashinfer_bench/agents/ffi_prompt.py`.
 
 ## Pick a binding
 
@@ -78,7 +77,8 @@ and dispatch macros (`DISPATCH_PYTORCH_DTYPE_TO_CTYPE_FP16` = FP16+BF16;
   `gpu_iface/backend/hip/` header (`mma_hip.h`, `memory_ops_hip.h`, `math_hip.h`, `vec_dtypes_hip.h`)
   and expose a common name — don't fork the whole kernel.
 - **CUTLASS is NVIDIA-only.** For matrix-core kernels use Composable Kernel (ck_tile) + rocWMMA, or
-  lean on AITER. Tracked in `ROCM_PORT_PLAN.md` §3.7.
+  lean on AITER. The `NVIDIA/cutlass` submodule was removed from this fork and **not replaced** —
+  CK/rocWMMA are not vendored, so such a kernel must bring its own headers.
 
 ## CDNA3 (gfx942) vs CDNA4 (gfx950)
 
@@ -106,12 +106,12 @@ no hardcoded warp=32 or tile sizes; correctness passes vs reference on gfx942.
 
 ## Maintaining this document
 
-Update when the torch/tvm-ffi builders change ROCm flag handling (§3.2/3.3), when the CUTLASS→CK
-decision (§3.7) lands, or when `agents/ffi_prompt.py` gains HIP-specific guidance (§3.11).
+Update when the torch/tvm-ffi builders change ROCm flag handling, if CK/rocWMMA are ever
+vendored to replace the removed CUTLASS submodule, or when `agents/ffi_prompt.py` changes its
+HIP guidance.
 
 ## See Also
 
-- [ROCM_PORT_PLAN.md](../../../ROCM_PORT_PLAN.md) §3.2, §3.3, §3.7, §3.11
 - [generate-aiter-solution](../generate-aiter-solution/SKILL.md) — try AITER first
 - [rocm-benchmark](../rocm-benchmark/SKILL.md) — build/time the solution
 - [rocm-debug](../rocm-debug/SKILL.md) — runtime fault triage, debug builds

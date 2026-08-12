@@ -51,8 +51,8 @@ what's being passed, print `t.shape, t.dtype, t.device, t.is_contiguous()` and c
 
 `compute-sanitizer` / `cuda-gdb` have **no direct ROCm equivalent.** The closest workflow is the
 env-var combo + `rocgdb`; `memcheck` is partially covered by an LLVM-ASan-instrumented HIP build
-(`-fsanitize=address`). `racecheck`/`synccheck`/`initcheck` are unsupported (`ROCM_PORT_PLAN.md`
-§3.10, risk #2) — the bench sanitizer agent degrades gracefully and returns "unsupported on ROCm".
+(`-fsanitize=address`). `racecheck`/`synccheck`/`initcheck` are unsupported — the bench sanitizer
+agent degrades gracefully and returns "unsupported on ROCm".
 
 ## AMD gotchas
 
@@ -90,7 +90,7 @@ AMD_LOG_LEVEL=3 HIP_LAUNCH_BLOCKING=1 python my_script.py 2> hip.trace
 ## Maintaining this document
 
 Update when new AITER error modes appear, when the sanitizer agent (`agents/sanitizer.py`) gains
-ROCm coverage (§3.10), or when JIT/cache debug behavior changes.
+deeper ROCm coverage (LLVM ASan / rocgdb), or when JIT/cache debug behavior changes.
 
 ## See Also
 
@@ -98,4 +98,3 @@ ROCm coverage (§3.10), or when JIT/cache debug behavior changes.
 - [rocm-benchmark](../rocm-benchmark/SKILL.md) — tolerances, AITER fallback conditions
 - [add-rocm-kernel](../add-rocm-kernel/SKILL.md) — build-side faults, debug builds
 - [generate-aiter-solution](../generate-aiter-solution/SKILL.md) — AITER coverage/fallthrough
-- [ROCM_PORT_PLAN.md](../../../ROCM_PORT_PLAN.md) §3.10 — profiling/debug agents

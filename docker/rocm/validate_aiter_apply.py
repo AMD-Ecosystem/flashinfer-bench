@@ -1,4 +1,4 @@
-"""P1 proof: AITER solutions flow through the `apply` runtime path on ROCm (§3.9 step 3).
+"""Proof: AITER solutions flow through the `apply` runtime path on ROCm.
 
 Flow: build a dataset with an RMSNorm definition -> augment it with an AITER solution via
 `augment_trace_set_with_aiter` -> benchmark to produce traces -> build ApplyRuntime and confirm
@@ -99,7 +99,7 @@ def main() -> int:
         #      *relative* error is large near-zero outputs (here ~0.16 with abs err ~0.008), so we
         #      set an op-appropriate max_rtol. NOTE: apply's max-relative-error filter differs from
         #      the benchmark's combined/matched-ratio correctness and is overly strict for such ops
-        #      (flagged in ROCM_PORT_PLAN.md as a follow-up).
+        #      (known follow-up).
         rt = ApplyRuntime(
             trace_set, ApplyConfig(on_miss_policy="use_def_best", max_atol=1e-2, max_rtol=1.0)
         )

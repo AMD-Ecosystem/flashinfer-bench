@@ -11,7 +11,7 @@ normal Benchmark loop (build with the PythonBuilder → time → correctness vs 
 
 This skill is AITER-as-kernel-source know-how; the implementation in this repo is
 `flashinfer_bench/integration/aiter/` and the end-to-end proof is
-`docker/rocm/validate_aiter_ops.py` (design: `ROCM_PORT_PLAN.md` §3.9).
+`docker/rocm/validate_aiter_ops.py`.
 
 ## AITER coverage reality (read before generating)
 
@@ -104,7 +104,6 @@ coverage (page sizes / fallback conditions) changes.
 
 - `flashinfer_bench/integration/aiter/generator.py` — implementation
 - `docker/rocm/validate_aiter_ops.py` — end-to-end proof + template
-- [ROCM_PORT_PLAN.md](../../../ROCM_PORT_PLAN.md) §3.9 — AITER integration plan
 - [rocm-benchmark](../rocm-benchmark/SKILL.md) — verify the backend engaged; tolerances
 - [rocm-debug](../rocm-debug/SKILL.md) — AITER error modes
 - [rocm-setup](../rocm-setup/SKILL.md) — install AITER

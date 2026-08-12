@@ -7,7 +7,7 @@ description: Stand up and verify a ROCm / AMD-CDNA environment for FlashInfer-Be
 
 Get a working ROCm environment and prove it on the GPU. The reproducible path is the
 [`docker/rocm/`](../../../docker/rocm/README.md) container; the bare-metal essentials and the
-day-to-day commands below apply either way. Rationale + pinned versions: `ROCM_PORT_PLAN.md`.
+day-to-day commands below apply either way. Pinned versions live in the Dockerfile.
 
 ## Essential commands
 
@@ -30,7 +30,7 @@ day-to-day commands below apply either way. Rationale + pinned versions: `ROCM_P
 - **Torch must be the AMD ROCm build.** Install from AMD's ROCm repo (`repo.radeon.com/rocm/...`);
   a stray PyPI/CPU wheel breaks everything. Verify: `python3 -c "import torch; assert torch.version.hip"`.
 - **`amd-flashinfer`** (imports as `flashinfer`) from `pypi.amd.com`. `pyproject.toml` no longer
-  declares NVIDIA's `flashinfer-python` (§3.12 swap done; `amd-flashinfer` sits under the optional
+  declares NVIDIA's `flashinfer-python` (that swap is done; `amd-flashinfer` sits under the optional
   `rocm` extra), so `--no-deps` now only guards against pip pulling the PyPI CUDA `torch`.
 - **AITER** is a separate install matched to the ROCm version:
   ```bash
@@ -65,8 +65,7 @@ bash docker/rocm/run.sh pytest -q
 
 `run.sh` passes `--device=/dev/kfd --device=/dev/dri --group-add video --group-add render
 --security-opt seccomp=unconfined --ipc=host`. Build-environment gotchas (BuildKit off, `docker
-logout` for the anonymous base pull, git from conda-forge) are baked into the Dockerfile and listed
-in `ROCM_PORT_PLAN.md`.
+logout` for the anonymous base pull, git from conda-forge) are baked into the Dockerfile.
 
 ## Validate
 
@@ -113,5 +112,4 @@ the version table in sync with `docker/rocm/Dockerfile`.
 ## See Also
 
 - [docker/rocm/README.md](../../../docker/rocm/README.md) — container reference
-- [ROCM_PORT_PLAN.md](../../../ROCM_PORT_PLAN.md) — porting plan + P0/P1 results
 - [rocm-benchmark](../rocm-benchmark/SKILL.md) · [generate-aiter-solution](../generate-aiter-solution/SKILL.md) · [rocm-debug](../rocm-debug/SKILL.md)

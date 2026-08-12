@@ -55,8 +55,8 @@ Codenames: MI300X/MI325X = gfx942 = CDNA3; MI355X = gfx950 = CDNA4.
    # ... measure ...
    sudo rocm-smi --resetclocks
    ```
-   (`ROCM_PORT_PLAN.md` §3.1 tracks folding `amd-smi` clock lock/read into `tools/gpu-lock` +
-   `env_snapshot()` so this becomes automatic.)
+   (Folding `amd-smi` clock lock/read into `tools/gpu-lock` + `env_snapshot()` so this becomes
+   automatic is **not done** — lock clocks by hand for now.)
 3. **Record** `props.name`, `props.gcnArchName`, `torch.version.hip` in the log.
 4. **Isolate the GPU:** `HIP_VISIBLE_DEVICES=N` (canonical AMD scoping; `ROCR_VISIBLE_DEVICES` is
    one layer deeper; `CUDA_VISIBLE_DEVICES` is also honored by torch). `tools/gpu-lock` sets this.
@@ -103,8 +103,7 @@ is on `PATH`. Verify the plain timing path works before adding counters.
 
 ## Tolerances (avoid false correctness failures)
 
-AMD rounding differs from NVIDIA; the evaluator's per-dtype tolerances may need tuning
-(`ROCM_PORT_PLAN.md` §3.6, risk #4):
+AMD rounding differs from NVIDIA; the evaluator's per-dtype tolerances may need tuning:
 
 | Dtype | atol | rtol | Notes |
 |---|---|---|---|
@@ -164,4 +163,3 @@ Update when `bench/timing.py` gains the rocprof backend, when clock-locking land
 - [generate-aiter-solution](../generate-aiter-solution/SKILL.md) — AITER coverage reality
 - [add-rocm-kernel](../add-rocm-kernel/SKILL.md) — arch flags for hand-written kernels
 - [rocm-debug](../rocm-debug/SKILL.md) — fp8 / NaN / crash triage
-- [ROCM_PORT_PLAN.md](../../../ROCM_PORT_PLAN.md) §3.0–3.1, §3.6, §3.10

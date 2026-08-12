@@ -91,5 +91,4 @@ for the per-error recipe table (memory faults, NaN/Inf, HIP OOM, AITER errors, f
 - **Hand-written HIP kernels** (when AITER/Triton don't cover an op): [`add-rocm-kernel`](.claude/skills/add-rocm-kernel/SKILL.md).
 - **Contributing changes back**: [`pr-workflow`](.claude/skills/pr-workflow/SKILL.md) (targets
   `AMD-Ecosystem/flashinfer-bench`, base `amd-integration`).
-- **Full porting context**: [`ROCM_PORT_PLAN.md`](ROCM_PORT_PLAN.md).
 - **Repo-level guidance for agents**: [`CLAUDE.md`](CLAUDE.md).
