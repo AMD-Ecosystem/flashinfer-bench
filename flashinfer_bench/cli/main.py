@@ -108,10 +108,10 @@ def merge_trace_sets(trace_sets):
                 merged.solutions[def_name] = []
             merged.solutions[def_name].extend(solutions)
         # Merge workloads
-        for def_name, workloads in trace_set.workload.items():
-            if def_name not in merged.workload:
-                merged.workload[def_name] = []
-            merged.workload[def_name].extend(workloads)
+        for def_name, workloads in trace_set.workloads.items():
+            if def_name not in merged.workloads:
+                merged.workloads[def_name] = []
+            merged.workloads[def_name].extend(workloads)
         # Merge traces
         for def_name, traces in trace_set.traces.items():
             if def_name not in merged.traces:
@@ -132,6 +132,7 @@ def export_trace_set(trace_set, output_dir):
     output_dir = Path(output_dir)
     (output_dir / "definitions").mkdir(parents=True, exist_ok=True)
     (output_dir / "solutions").mkdir(parents=True, exist_ok=True)
+    (output_dir / "workloads").mkdir(parents=True, exist_ok=True)
     (output_dir / "traces").mkdir(parents=True, exist_ok=True)
     # Save definitions
     for definition in trace_set.definitions.values():
@@ -151,10 +152,12 @@ def export_trace_set(trace_set, output_dir):
             )
             out_path.parent.mkdir(parents=True, exist_ok=True)
             save_json_file(solution, out_path)
-    # Save workload traces
-    for def_name, workloads in trace_set.workload.items():
+    # Save workload traces. These go under workloads/, not traces/: TraceSet.from_path asserts
+    # that everything under traces/ is an execution trace, so exporting them alongside would
+    # produce a directory that cannot be loaded back.
+    for def_name, workloads in trace_set.workloads.items():
         if workloads:
-            out_path = output_dir / "traces" / f"{_safe_path_segment(def_name)}_workloads.jsonl"
+            out_path = output_dir / "workloads" / f"{_safe_path_segment(def_name)}.jsonl"
             save_jsonl_file(workloads, out_path)
     # Save regular traces
     for def_name, traces in trace_set.traces.items():
