@@ -357,7 +357,11 @@ def find_trace_file(trace_dir: Path, def_name: str) -> Path:
         wrong author's traces.
     """
     traces_root = trace_dir / "traces"
-    matches = sorted(p for p in traces_root.rglob(f"{def_name}.jsonl") if p.is_file())
+    # Match the filename exactly rather than globbing on def_name: it comes from --def-name, and
+    # glob metacharacters in it ("*", "?", "[...]") would otherwise match some other definition's
+    # trace and upload it.
+    wanted = f"{def_name}.jsonl"
+    matches = sorted(p for p in traces_root.rglob("*.jsonl") if p.is_file() and p.name == wanted)
     if not matches:
         raise FileNotFoundError(f"no trace file named '{def_name}.jsonl' under {traces_root}")
     if len(matches) > 1:

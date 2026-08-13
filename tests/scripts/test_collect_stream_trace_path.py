@@ -69,3 +69,23 @@ def test_does_not_match_a_different_definition(tmp_path: Path):
 
     with pytest.raises(FileNotFoundError):
         collect_stream.find_trace_file(tmp_path, "d1")
+
+
+@pytest.mark.parametrize("def_name", ["d?", "d*", "[d]1"])
+def test_def_name_is_not_treated_as_a_glob(tmp_path: Path, def_name: str):
+    """`def_name` comes from --def-name; metacharacters must not match another definition.
+
+    Globbing on it would let `--def-name 'd?'` match `d1.jsonl` and upload the wrong definition's
+    traces to the dataset.
+    """
+    _write_trace(tmp_path, "baseline", "rmsnorm", "d1.jsonl")
+
+    with pytest.raises(FileNotFoundError):
+        collect_stream.find_trace_file(tmp_path, def_name)
+
+
+def test_matches_a_definition_name_containing_a_literal_bracket(tmp_path: Path):
+    """The exact-name match still finds a definition whose name contains metacharacters."""
+    expected = _write_trace(tmp_path, "baseline", "rmsnorm", "d[1].jsonl")
+
+    assert collect_stream.find_trace_file(tmp_path, "d[1]") == expected

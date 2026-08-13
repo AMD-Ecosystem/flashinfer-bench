@@ -168,10 +168,19 @@ def export_trace_set(trace_set, output_dir):
             save_json_file(solution, out_path)
     # Save workload traces. These go under workloads/, not traces/: TraceSet.from_path asserts
     # that everything under traces/ is an execution trace, so exporting them alongside would
-    # produce a directory that cannot be loaded back.
+    # produce a directory that cannot be loaded back. The op_type segment matches what
+    # TraceSet.add_workload_traces writes, so consumers that build the path directly (rather than
+    # rglob'ing, as from_path does) still find these files.
     for def_name, workloads in trace_set.workloads.items():
         if workloads:
-            out_path = output_dir / "workloads" / f"{_safe_path_segment(def_name)}.jsonl"
+            definition = trace_set.definitions[def_name]
+            out_path = (
+                output_dir
+                / "workloads"
+                / _safe_path_segment(definition.op_type)
+                / f"{_safe_path_segment(def_name)}.jsonl"
+            )
+            out_path.parent.mkdir(parents=True, exist_ok=True)
             save_jsonl_file(workloads, out_path)
     # Save regular traces
     for def_name, traces in trace_set.traces.items():

@@ -202,3 +202,19 @@ def test_merge_output_round_trips_through_from_path(tmp_path: Path):
     ]
     assert reloaded.get_solution("s_a") is not None
     assert reloaded.get_solution("s_b") is not None
+
+
+def test_exported_workloads_use_the_op_type_layout(tmp_path: Path):
+    """Workloads must export as workloads/{op_type}/{def}.jsonl.
+
+    ``from_path`` rglobs and so would accept a flat file, but ``add_workload_traces`` writes the
+    op_type segment and consumers build that path directly — a flat export is invisible to them.
+    """
+    merged = merge_trace_sets([_trace_set("d1", "a", "u1")])
+
+    out = tmp_path / "merged"
+    export_trace_set(merged, out)
+
+    # _definition() uses op_type "op".
+    assert (out / "workloads" / "op" / "d1.jsonl").is_file()
+    assert not (out / "workloads" / "d1.jsonl").exists()
