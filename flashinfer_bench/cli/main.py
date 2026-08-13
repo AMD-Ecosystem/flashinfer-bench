@@ -87,7 +87,7 @@ def summary(args: argparse.Namespace):
 
 
 def merge_trace_sets(trace_sets):
-    """Merge multiple TraceSets into one, raising on definition conflicts."""
+    """Merge multiple TraceSets into one, raising on definition or solution conflicts."""
     if not trace_sets:
         raise ValueError("No TraceSets to merge.")
     # Start with a deep copy of the first TraceSet
@@ -102,11 +102,21 @@ def merge_trace_sets(trace_sets):
                     raise ValueError(f"Definition conflict for '{name}' during merge.")
             else:
                 merged.definitions[name] = definition
-        # Merge solutions
+        # Merge solutions. Solution names are globally unique (from_path rejects duplicates), and
+        # inputs commonly share one — e.g. the same baseline — so dedupe identical solutions and
+        # only conflict on a genuine mismatch, mirroring the definition handling above. Solution
+        # equality is a content hash over definition/spec/sources that excludes name, author and
+        # description, so "conflict" here means the same name carries a different implementation.
         for def_name, solutions in trace_set.solutions.items():
-            if def_name not in merged.solutions:
-                merged.solutions[def_name] = []
-            merged.solutions[def_name].extend(solutions)
+            bucket = merged.solutions.setdefault(def_name, [])
+            by_name = {s.name: s for s in bucket}
+            for solution in solutions:
+                existing = by_name.get(solution.name)
+                if existing is None:
+                    bucket.append(solution)
+                    by_name[solution.name] = solution
+                elif existing != solution:
+                    raise ValueError(f"Solution conflict for '{solution.name}' during merge.")
         # Merge workloads
         for def_name, workloads in trace_set.workloads.items():
             if def_name not in merged.workloads:
@@ -117,6 +127,10 @@ def merge_trace_sets(trace_sets):
             if def_name not in merged.traces:
                 merged.traces[def_name] = []
             merged.traces[def_name].extend(traces)
+    # The loops above mutate the dicts directly, which leaves the name/solution lookup indexes
+    # holding only the first TraceSet's entries; get_solution and the score helpers would miss
+    # everything merged in after it.
+    merged.rebuild_indexes()
     return merged
 
 

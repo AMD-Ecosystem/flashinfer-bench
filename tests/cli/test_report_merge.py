@@ -1,12 +1,15 @@
 """Tests for `flashinfer-bench report merge` (`cli.main.merge_trace_sets` / `export_trace_set`).
 
-Both tests fail against the pre-fix code: the first with ``AttributeError: 'TraceSet' object has
-no attribute 'workload'``, the second with the ``assert not t.is_workload_trace()`` in
-``TraceSet.from_path`` — merge wrote workload traces into ``traces/``, where the loader expects
-only execution traces.
+These fail against the pre-fix code in three distinct ways: ``AttributeError: 'TraceSet' object
+has no attribute 'workload'`` (the field is ``workloads``); the ``assert not
+t.is_workload_trace()`` in ``TraceSet.from_path``, because merge wrote workload traces into
+``traces/`` where the loader expects only execution traces; and ``get_solution`` returning ``None``
+for solutions merged in after the first TraceSet, whose lookup indexes were never rebuilt.
 """
 
 from pathlib import Path
+
+import pytest
 
 from flashinfer_bench.cli.main import export_trace_set, merge_trace_sets
 from flashinfer_bench.data import (
@@ -77,12 +80,15 @@ def _execution_trace(def_name: str, solution: str, uuid: str) -> Trace:
 
 
 def _trace_set(def_name: str, author: str, uuid_prefix: str) -> TraceSet:
-    ts = TraceSet()
-    ts.definitions[def_name] = _definition(def_name)
-    ts.solutions[def_name] = [_solution(f"s_{author}", def_name, author)]
-    ts.workloads[def_name] = [_workload_trace(def_name, f"{uuid_prefix}_w")]
-    ts.traces[def_name] = [_execution_trace(def_name, f"s_{author}", f"{uuid_prefix}_t")]
-    return ts
+    # Populate via the constructor, not by assigning the dicts afterwards, so __post_init__ builds
+    # the lookup indexes — otherwise the inputs start out as stale as the bug under test.
+    solution_name = f"s_{author}"
+    return TraceSet(
+        definitions={def_name: _definition(def_name)},
+        solutions={def_name: [_solution(solution_name, def_name, author)]},
+        workloads={def_name: [_workload_trace(def_name, f"{uuid_prefix}_w")]},
+        traces={def_name: [_execution_trace(def_name, solution_name, f"{uuid_prefix}_t")]},
+    )
 
 
 def test_merge_trace_sets_combines_workloads():
@@ -114,6 +120,61 @@ def test_merge_trace_sets_concatenates_shared_definition():
     assert sorted(t.workload.uuid for t in merged.workloads["d1"]) == ["u1_w", "u2_w"]
     assert sorted(t.workload.uuid for t in merged.traces["d1"]) == ["u1_t", "u2_t"]
     assert len(merged.solutions["d1"]) == 2
+
+
+def test_merged_lookup_indexes_cover_every_input():
+    """``get_solution`` must find solutions contributed by TraceSets after the first.
+
+    The merge loops mutate ``solutions``/``traces`` directly, so the indexes built at construction
+    only ever held the first TraceSet's entries. ``merged.get_solution("s_b")`` returned ``None``
+    for a solution sitting in ``merged.solutions`` — the merged object was only usable after a
+    save + reload round-trip.
+    """
+    merged = merge_trace_sets([_trace_set("d1", "a", "u1"), _trace_set("d2", "b", "u2")])
+
+    assert merged.get_solution("s_a") is not None
+    assert merged.get_solution("s_b") is not None
+    # The trace index backs the score/ranking helpers and must cover later inputs too.
+    assert merged._traces_by_solution.keys() == {"s_a", "s_b"}
+
+
+def test_merge_dedupes_an_identical_shared_solution():
+    """Inputs commonly share a solution (a baseline); that must merge, not explode."""
+    first = _trace_set("d1", "a", "u1")
+    second = _trace_set("d1", "a", "u2")
+    second.definitions["d1"] = first.definitions["d1"]
+
+    merged = merge_trace_sets([first, second])
+
+    assert [s.name for s in merged.solutions["d1"]] == ["s_a"]
+    assert merged.get_solution("s_a") is not None
+    # Both sides' traces still land.
+    assert sorted(t.workload.uuid for t in merged.traces["d1"]) == ["u1_t", "u2_t"]
+
+
+def test_merge_raises_on_conflicting_solution_of_the_same_name():
+    """Same name, different implementation: refuse rather than emit a set from_path rejects.
+
+    ``Solution`` equality is a content hash over definition/spec/sources that deliberately
+    excludes name, author and description — so the conflict has to be a real source difference.
+    """
+    first = _trace_set("d1", "a", "u1")
+    second = _trace_set("d1", "a", "u2")
+    second.definitions["d1"] = first.definitions["d1"]
+    conflicting = Solution(
+        name="s_a",
+        definition="d1",
+        author="a",
+        spec=BuildSpec(
+            language=SupportedLanguages.PYTHON, target_hardware=["cpu"], entry_point="main.py::run"
+        ),
+        sources=[SourceFile(path="main.py", content="def run():\n    return 1\n")],
+    )
+    assert conflicting != first.solutions["d1"][0]
+    second.solutions["d1"] = [conflicting]
+
+    with pytest.raises(ValueError, match="Solution conflict for 's_a'"):
+        merge_trace_sets([first, second])
 
 
 def test_merge_output_round_trips_through_from_path(tmp_path: Path):

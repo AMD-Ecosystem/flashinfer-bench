@@ -95,6 +95,18 @@ class TraceSet:
 
     def __post_init__(self):
         """Initialize lookup indexes from existing data."""
+        self.rebuild_indexes()
+
+    def rebuild_indexes(self) -> None:
+        """Rebuild the solution/trace lookup indexes from ``solutions`` and ``traces``.
+
+        Call this after mutating those dicts directly (rather than via ``add_traces`` and friends),
+        otherwise ``get_solution`` and the score/ranking helpers read a stale index. Enforces the
+        same globally-unique solution-name rule as ``from_path``, so a TraceSet that could not be
+        loaded back from disk cannot be built in memory either.
+        """
+        self._solution_by_name = {}
+        self._traces_by_solution = {}
         for solutions_list in self.solutions.values():
             for solution in solutions_list:
                 if solution.name in self._solution_by_name:
