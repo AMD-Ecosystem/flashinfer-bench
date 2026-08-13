@@ -87,7 +87,7 @@ def summary(args: argparse.Namespace):
 
 
 def merge_trace_sets(trace_sets):
-    """Merge multiple TraceSets into one, raising on definition conflicts."""
+    """Merge multiple TraceSets into one, raising on definition or solution conflicts."""
     if not trace_sets:
         raise ValueError("No TraceSets to merge.")
     # Start with a deep copy of the first TraceSet
@@ -102,21 +102,35 @@ def merge_trace_sets(trace_sets):
                     raise ValueError(f"Definition conflict for '{name}' during merge.")
             else:
                 merged.definitions[name] = definition
-        # Merge solutions
+        # Merge solutions. Solution names are globally unique (from_path rejects duplicates), and
+        # inputs commonly share one — e.g. the same baseline — so dedupe identical solutions and
+        # only conflict on a genuine mismatch, mirroring the definition handling above. Solution
+        # equality is a content hash over definition/spec/sources that excludes name, author and
+        # description, so "conflict" here means the same name carries a different implementation.
         for def_name, solutions in trace_set.solutions.items():
-            if def_name not in merged.solutions:
-                merged.solutions[def_name] = []
-            merged.solutions[def_name].extend(solutions)
+            bucket = merged.solutions.setdefault(def_name, [])
+            by_name = {s.name: s for s in bucket}
+            for solution in solutions:
+                existing = by_name.get(solution.name)
+                if existing is None:
+                    bucket.append(solution)
+                    by_name[solution.name] = solution
+                elif existing != solution:
+                    raise ValueError(f"Solution conflict for '{solution.name}' during merge.")
         # Merge workloads
-        for def_name, workloads in trace_set.workload.items():
-            if def_name not in merged.workload:
-                merged.workload[def_name] = []
-            merged.workload[def_name].extend(workloads)
+        for def_name, workloads in trace_set.workloads.items():
+            if def_name not in merged.workloads:
+                merged.workloads[def_name] = []
+            merged.workloads[def_name].extend(workloads)
         # Merge traces
         for def_name, traces in trace_set.traces.items():
             if def_name not in merged.traces:
                 merged.traces[def_name] = []
             merged.traces[def_name].extend(traces)
+    # The loops above mutate the dicts directly, which leaves the name/solution lookup indexes
+    # holding only the first TraceSet's entries; get_solution and the score helpers would miss
+    # everything merged in after it.
+    merged.rebuild_indexes()
     return merged
 
 
@@ -132,6 +146,7 @@ def export_trace_set(trace_set, output_dir):
     output_dir = Path(output_dir)
     (output_dir / "definitions").mkdir(parents=True, exist_ok=True)
     (output_dir / "solutions").mkdir(parents=True, exist_ok=True)
+    (output_dir / "workloads").mkdir(parents=True, exist_ok=True)
     (output_dir / "traces").mkdir(parents=True, exist_ok=True)
     # Save definitions
     for definition in trace_set.definitions.values():
@@ -151,10 +166,21 @@ def export_trace_set(trace_set, output_dir):
             )
             out_path.parent.mkdir(parents=True, exist_ok=True)
             save_json_file(solution, out_path)
-    # Save workload traces
-    for def_name, workloads in trace_set.workload.items():
+    # Save workload traces. These go under workloads/, not traces/: TraceSet.from_path asserts
+    # that everything under traces/ is an execution trace, so exporting them alongside would
+    # produce a directory that cannot be loaded back. The op_type segment matches what
+    # TraceSet.add_workload_traces writes, so consumers that build the path directly (rather than
+    # rglob'ing, as from_path does) still find these files.
+    for def_name, workloads in trace_set.workloads.items():
         if workloads:
-            out_path = output_dir / "traces" / f"{_safe_path_segment(def_name)}_workloads.jsonl"
+            definition = trace_set.definitions[def_name]
+            out_path = (
+                output_dir
+                / "workloads"
+                / _safe_path_segment(definition.op_type)
+                / f"{_safe_path_segment(def_name)}.jsonl"
+            )
+            out_path.parent.mkdir(parents=True, exist_ok=True)
             save_jsonl_file(workloads, out_path)
     # Save regular traces
     for def_name, traces in trace_set.traces.items():

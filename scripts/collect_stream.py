@@ -340,29 +340,59 @@ def run_eval(def_name: str, trace_dir: Path) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def push_trace(pr_num: int, def_name: str, op_type: str, trace_dir: Path) -> None:
+def find_trace_file(trace_dir: Path, def_name: str) -> Path:
+    """Locate the trace JSONL that flashinfer-bench wrote for ``def_name``.
+
+    Traces land at ``traces/{author}/{op_type}/{def_name}.jsonl``. This searches for the file
+    rather than reconstructing that path: this script never learns the author, and the previously
+    hardcoded (pre-author) layout matched nothing after the layout changed — leaving the pipeline
+    to log one warning and exit successfully having uploaded no traces.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no matching trace file exists.
+    ValueError
+        If several match (e.g. more than one author), since picking one silently could push the
+        wrong author's traces.
+    """
+    traces_root = trace_dir / "traces"
+    # Match the filename exactly rather than globbing on def_name: it comes from --def-name, and
+    # glob metacharacters in it ("*", "?", "[...]") would otherwise match some other definition's
+    # trace and upload it.
+    wanted = f"{def_name}.jsonl"
+    matches = sorted(p for p in traces_root.rglob("*.jsonl") if p.is_file() and p.name == wanted)
+    if not matches:
+        raise FileNotFoundError(f"no trace file named '{def_name}.jsonl' under {traces_root}")
+    if len(matches) > 1:
+        found = ", ".join(str(p.relative_to(trace_dir)) for p in matches)
+        raise ValueError(f"multiple trace files for '{def_name}' under {traces_root}: {found}")
+    return matches[0]
+
+
+def push_trace(pr_num: int, def_name: str, trace_dir: Path) -> None:
     """Push the baseline trace JSONL to the HF PR."""
     from huggingface_hub import CommitOperationAdd, HfApi
 
     api = HfApi()
 
-    # flashinfer-bench writes traces to traces/{op_type}/{def_name}.jsonl
-    trace_path = trace_dir / "traces" / op_type / f"{def_name}.jsonl"
-    if not trace_path.exists():
-        log(f"WARNING: trace not found at {trace_path}, skipping")
-        return
+    try:
+        trace_path = find_trace_file(trace_dir, def_name)
+    except (FileNotFoundError, ValueError) as exc:
+        # Uploading nothing is the failure this step exists to prevent, so fail loudly.
+        log(f"ERROR: {exc}")
+        sys.exit(1)
+
+    # Mirror the on-disk layout (including the author segment) into the dataset repo.
+    path_in_repo = trace_path.relative_to(trace_dir).as_posix()
 
     lines = [l for l in trace_path.read_text().splitlines() if l.strip()]
-    log(f"Pushing trace ({len(lines)} entries) to PR #{pr_num} ...")
+    log(f"Pushing trace ({len(lines)} entries) from {path_in_repo} to PR #{pr_num} ...")
 
     result = api.create_commit(
         repo_id=HF_REPO_ID,
         repo_type=HF_REPO_TYPE,
-        operations=[
-            CommitOperationAdd(
-                path_in_repo=f"traces/{op_type}/{def_name}.jsonl", path_or_fileobj=str(trace_path)
-            )
-        ],
+        operations=[CommitOperationAdd(path_in_repo=path_in_repo, path_or_fileobj=str(trace_path))],
         commit_message=f"Add {def_name} baseline traces",
         revision=f"refs/pr/{pr_num}",
     )
@@ -639,7 +669,7 @@ def main():
     # --- Step 6: push trace ---
     if not args.no_push:
         log("Step 6: push trace to HF PR")
-        push_trace(args.pr_num, args.def_name, op_type, trace_dir)
+        push_trace(args.pr_num, args.def_name, trace_dir)
     else:
         log("Step 6: skipped (--no-push)")
 
